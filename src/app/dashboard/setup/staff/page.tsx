@@ -37,21 +37,18 @@ export default function StaffPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [error, setError] = useState('');
 
-  async function loadStaff() {
-    const res = await fetch('/api/restaurant/staff');
-    if (res.status === 403) {
-      router.replace('/dashboard');
-      return;
+  useEffect(() => {
+    async function load() {
+      const res = await fetch('/api/restaurant/staff');
+      if (res.status === 403) { router.replace('/dashboard'); return; }
+      if (res.ok) {
+        const data = await res.json();
+        setStaff(data.staff); setUserRole(data.role ?? null);
+      }
+      setLoading(false);
     }
-    if (res.ok) {
-      const data = await res.json();
-      setStaff(data.staff);
-      setUserRole(data.role ?? null);
-    }
-    setLoading(false);
-  }
-
-  useEffect(() => { loadStaff(); }, []);
+    load();
+  }, [router]);
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -77,7 +74,11 @@ export default function StaffPage() {
       setName('');
       setEmail('');
       setRole('STAFF');
-      await loadStaff();
+      const refreshRes = await fetch('/api/restaurant/staff');
+      if (refreshRes.ok) {
+        const data = await refreshRes.json();
+        setStaff(data.staff); setUserRole(data.role ?? null);
+      }
     }
     setSubmitting(false);
   }

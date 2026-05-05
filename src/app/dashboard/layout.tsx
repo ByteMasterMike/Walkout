@@ -7,10 +7,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await auth();
   if (!session?.user?.restaurantId) redirect('/auth/login');
 
-  const restaurant = await prisma.restaurant.findUnique({
-    where: { id: session.user.restaurantId },
-    select: { name: true },
-  });
+  let restaurant: { name: string } | null = null;
+  try {
+    restaurant = await prisma.restaurant.findUnique({
+      where: { id: session.user.restaurantId },
+      select: { name: true },
+    });
+  } catch {
+    // Fall back to generic name
+  }
 
   return (
     <DashboardShell

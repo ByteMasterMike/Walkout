@@ -24,6 +24,7 @@ export async function GET() {
       acceptedAt: true,
     },
     orderBy: { invitedAt: 'desc' },
+    take: 200,
   });
 
   return NextResponse.json({ staff, role: session.user.role });

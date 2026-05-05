@@ -76,6 +76,8 @@ export default function RequestsPage() {
   const [, setTick] = useState(0);
   const audioCtx = useRef<AudioContext | null>(null);
   const prevOpenCount = useRef(0);
+  const chimeEnabledRef = useRef(chimeEnabled);
+  useEffect(() => { chimeEnabledRef.current = chimeEnabled; }, [chimeEnabled]);
 
   function getAudioCtx(): AudioContext {
     if (!audioCtx.current) {
@@ -87,12 +89,12 @@ export default function RequestsPage() {
   const checkAndChime = useCallback(
     (reqs: ServiceRequest[]) => {
       const openCount = reqs.filter((r) => r.status === 'OPEN').length;
-      if (chimeEnabled && openCount > prevOpenCount.current) {
+      if (chimeEnabledRef.current && openCount > prevOpenCount.current) {
         try { playChime(getAudioCtx()); } catch { /* AudioContext may be blocked before user gesture */ }
       }
       prevOpenCount.current = openCount;
     },
-    [chimeEnabled]
+    []
   );
 
   useEffect(() => {
