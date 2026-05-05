@@ -27,9 +27,8 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'PokerPay — Trustless Table Banking',
-  description:
-    'Eliminate the need for a designated banker at poker tables. QR-code deposits, AI chip counting cashouts, and persistent P&L tracking.',
+  title: 'WalkOut',
+  description: 'Walk in. Eat. Walk out.',
 };
 
 export const viewport = {
