@@ -29,15 +29,15 @@ type KdsItem = {
 };
 
 const STATUS_NEXT: Partial<Record<OrderItemStatus, OrderItemStatus>> = {
-  PENDING:   'PREPPING',
+  PENDING:   'CONFIRMED',
   CONFIRMED: 'PREPPING',
   PREPPING:  'SERVED',
 };
 
 const STATUS_LABEL: Record<OrderItemStatus, string> = {
-  PENDING:      'Tap to start',
-  CONFIRMED:    'Tap to start',
-  PREPPING:     'Prepping',
+  PENDING:      'Tap to confirm',
+  CONFIRMED:    'Tap to start prep',
+  PREPPING:     'Tap when ready',
   SERVED:       'Served',
   CANCELLED:    'Cancelled',
   CASH_PENDING: 'Cash payment',
