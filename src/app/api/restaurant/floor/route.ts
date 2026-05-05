@@ -67,22 +67,24 @@ export async function POST(request: Request) {
 
   const { restaurantId } = session.user
   const tableIds = parsed.data.assignments.map((a) => a.tableId)
-  const staffIds = parsed.data.assignments.map((a) => a.staffId)
+  // Deduplicate staffIds — one server can cover multiple tables, so the same
+  // staffId appearing N times is valid and must not fail the count check.
+  const uniqueStaffIds = [...new Set(parsed.data.assignments.map((a) => a.staffId))]
 
-  // Verify all tableIds and staffIds belong to this restaurant
+  // Verify all tableIds and unique staffIds belong to this restaurant
   const [tableCount, staffCount] = await Promise.all([
     prisma.diningTable.count({
       where: { id: { in: tableIds }, restaurantId },
     }),
     prisma.restaurantStaff.count({
-      where: { id: { in: staffIds }, restaurantId, isActive: true },
+      where: { id: { in: uniqueStaffIds }, restaurantId, isActive: true },
     }),
   ])
 
   if (tableCount !== tableIds.length) {
     return NextResponse.json({ error: 'One or more tables not found' }, { status: 422 })
   }
-  if (staffCount !== staffIds.length) {
+  if (staffCount !== uniqueStaffIds.length) {
     return NextResponse.json({ error: 'One or more staff members not found' }, { status: 422 })
   }
 
