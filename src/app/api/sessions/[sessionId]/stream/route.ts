@@ -1,6 +1,7 @@
 export const runtime = 'edge'
 
 import { createSupabaseClient } from '@/lib/supabase'
+import { getToken } from 'next-auth/jwt'
 import { z } from 'zod'
 
 const uuidSchema = z.string().uuid()
@@ -18,29 +19,51 @@ export async function GET(
     })
   }
 
-  // Verify participant membership via Supabase directly (no Prisma on Edge)
-  const anonToken = request.headers.get('x-anon-token')
-  if (!anonToken) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
   const supabase = createSupabaseClient()
+  const anonToken = request.headers.get('x-anon-token')
 
-  const { data: participant, error } = await supabase
-    .from('tab_participants')
-    .select('id')
-    .eq('session_id', sessionId)
-    .eq('anon_token', anonToken)
-    .maybeSingle()
+  if (anonToken) {
+    // Anonymous guest: verify anon token maps to a participant in this session
+    const { data: participant, error } = await supabase
+      .from('tab_participants')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('anon_token', anonToken)
+      .maybeSingle()
 
-  if (error || !participant) {
-    return new Response(JSON.stringify({ error: 'Participant not found in session' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    if (error || !participant) {
+      return new Response(JSON.stringify({ error: 'Participant not found in session' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+  } else {
+    // Authenticated diner account: verify via NextAuth JWT (works on Edge)
+    const token = await getToken({ req: request as Parameters<typeof getToken>[0]['req'], secret: process.env.NEXTAUTH_SECRET })
+    if (!token) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Verify the authenticated diner is a participant in this session
+    const dinerId = token.sub
+    if (dinerId) {
+      const { data: participant } = await supabase
+        .from('tab_participants')
+        .select('id')
+        .eq('session_id', sessionId)
+        .eq('diner_id', dinerId)
+        .maybeSingle()
+
+      if (!participant) {
+        return new Response(JSON.stringify({ error: 'Participant not found in session' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+    }
   }
 
   const { readable, writable } = new TransformStream()

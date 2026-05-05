@@ -53,58 +53,57 @@ export async function GET(
     anonParticipantId = participant.id
   }
 
-  const participants = await prisma.tabParticipant.findMany({
-    where: { sessionId },
-    select: {
-      id: true,
-      displayName: true,
-      isHost: true,
-      joinedAt: true,
-      departedAt: true,
-    },
-    orderBy: { joinedAt: 'asc' },
-  })
-
-  // For anon callers: only return orders for their own participant
+  // For anon callers: only return their own orders and service requests
   const orderFilter = isAnon && anonParticipantId
     ? { sessionId, participantId: anonParticipantId }
     : { sessionId }
-
-  const orders = await prisma.orderItem.findMany({
-    where: orderFilter,
-    select: {
-      id: true,
-      participantId: true,
-      menuItemId: true,
-      menuItem: { select: { name: true } },
-      quantity: true,
-      unitPrice: true,
-      taxRate: true,
-      taxAmount: true,
-      notes: true,
-      status: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: 'asc' },
-  })
-
-  // For anon callers: only return their own service requests
   const serviceRequestFilter = isAnon && anonParticipantId
     ? { sessionId, participantId: anonParticipantId }
     : { sessionId }
 
-  const serviceRequests = await prisma.serviceRequest.findMany({
-    where: serviceRequestFilter,
-    select: {
-      id: true,
-      participantId: true,
-      type: true,
-      status: true,
-      notes: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: 'asc' },
-  })
+  // Run all three reads in parallel — they are independent queries
+  const [participants, orders, serviceRequests] = await Promise.all([
+    prisma.tabParticipant.findMany({
+      where: { sessionId },
+      select: {
+        id: true,
+        displayName: true,
+        isHost: true,
+        joinedAt: true,
+        departedAt: true,
+      },
+      orderBy: { joinedAt: 'asc' },
+    }),
+    prisma.orderItem.findMany({
+      where: orderFilter,
+      select: {
+        id: true,
+        participantId: true,
+        menuItemId: true,
+        menuItem: { select: { name: true } },
+        quantity: true,
+        unitPrice: true,
+        taxRate: true,
+        taxAmount: true,
+        notes: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.serviceRequest.findMany({
+      where: serviceRequestFilter,
+      select: {
+        id: true,
+        participantId: true,
+        type: true,
+        status: true,
+        notes: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ])
 
   return NextResponse.json({
     session,

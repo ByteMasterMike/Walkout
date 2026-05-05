@@ -108,7 +108,12 @@ export async function POST(
   }
 
   // Assign the active server for this table (best-effort, no error on miss)
-  await assignServerToSession(session.id, table.restaurantId);
+  try {
+    await assignServerToSession(session.id, table.restaurantId);
+  } catch {
+    // Best-effort: a transient DB error should not block the NFC tap.
+    // Missing assignment shows "Unassigned" warning in dashboard UI.
+  }
 
   // Set httpOnly anon cookie (24h, secure, SameSite=lax)
   const cookieStore = await cookies();

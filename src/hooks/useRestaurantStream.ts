@@ -77,10 +77,26 @@ export function useRestaurantStream({
 
   useEffect(() => {
     connect()
+
+    // PRD §10.4: re-establish SSE when tab returns to visible after backgrounding.
+    // Staff tablets that lock during service must not miss order or service request
+    // events when they return to the KDS or floor dashboard.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        esRef.current?.close()
+        esRef.current = null
+        if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
+        retryDelayRef.current = 1000
+        connect()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
     return () => {
       esRef.current?.close()
       esRef.current = null
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [connect])
 }

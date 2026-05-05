@@ -10,8 +10,18 @@ export async function GET(
 
   const invalidRestaurantId = validateUuid(restaurantId, 'restaurantId')
   if (invalidRestaurantId) return invalidRestaurantId
+
   const { searchParams } = new URL(request.url)
   const search = searchParams.get('search')?.trim()
+
+  // Verify the restaurant exists before returning its menu
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { id: true },
+  })
+  if (!restaurant) {
+    return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
+  }
 
   const searchFilter = search
     ? {
@@ -29,12 +39,9 @@ export async function GET(
       select: { id: true, name: true, sortOrder: true },
     }),
     prisma.menuItem.findMany({
-      where: {
-        restaurantId,
-        isAvailable: true,
-        ...searchFilter,
-      },
+      where: { restaurantId, isAvailable: true, ...searchFilter },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      take: 500,
       select: {
         id: true,
         categoryId: true,

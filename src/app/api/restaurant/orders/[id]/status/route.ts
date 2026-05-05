@@ -8,44 +8,54 @@ import { validateUuid } from '@/lib/validate'
 const PIN_MAX_ATTEMPTS = 5;
 const PIN_WINDOW_MS = 15 * 60 * 1000;
 
-// DB-backed PIN rate limiter: reads/writes kdsDevicePin attempt metadata from
-// the RestaurantStaff record via a JSON field. Serverless-safe — no in-memory state.
-// We reuse the existing staff record rather than adding a new table for v1.
+// DB-backed PIN rate limiter using pinAttemptCount + pinLockedUntil on RestaurantStaff.
+// Serverless-safe — no in-memory state, persists across Lambda cold starts.
 async function checkAndIncrementPinAttempts(staffId: string): Promise<boolean> {
+  const now = new Date();
   const staff = await prisma.restaurantStaff.findUnique({
     where: { id: staffId },
-    select: { kdsDevicePin: true },
+    select: { pinAttemptCount: true, pinLockedUntil: true },
   });
   if (!staff) return false;
 
-  // Use a separate counter stored in a temporary cache key approach:
-  // Since RestaurantStaff doesn't have a pinAttemptCount field, we check
-  // by querying the last N failed attempts via a raw approach.
-  // For v1 simplicity, track in a dedicated cache table via Prisma.
-  // Simpler approach: use the existing staff record's updatedAt as a sentinel
-  // and count in-flight using the kdsDevicePin hash prefix as a nonce field.
-  // Actual implementation: write attempt count into a volatile JSON column.
-  // Until schema adds pinAttemptData, enforce via application-level lock with
-  // a generous guard: allow up to PIN_MAX_ATTEMPTS distinct bcrypt checks
-  // within the window by storing attempt timestamp in a DB-updated field.
-  // TODO(michael): add pinAttemptCount and pinAttemptWindowStart Int? fields
-  // to RestaurantStaff in next migration to make this fully robust.
-  // For now, this route enforces the check but relies on the middleware-level
-  // RBAC (STAFF cannot act on behalf of another staff) to limit blast radius.
-  return true;
+  // Still locked
+  if (staff.pinLockedUntil && staff.pinLockedUntil > now) return false;
+
+  // Window expired or never set — reset counter
+  const reset = !staff.pinLockedUntil || staff.pinLockedUntil <= now;
+  const newCount = reset ? 1 : staff.pinAttemptCount + 1;
+  const lockedUntil = newCount >= PIN_MAX_ATTEMPTS
+    ? new Date(now.getTime() + PIN_WINDOW_MS)
+    : null;
+
+  await prisma.restaurantStaff.update({
+    where: { id: staffId },
+    data: { pinAttemptCount: newCount, pinLockedUntil: lockedUntil },
+  });
+  return newCount <= PIN_MAX_ATTEMPTS;
 }
 
-async function clearPinAttempts(_staffId: string): Promise<void> {
-  // No-op until schema migration adds attempt tracking fields.
+async function clearPinAttempts(staffId: string): Promise<void> {
+  await prisma.restaurantStaff.update({
+    where: { id: staffId },
+    data: { pinAttemptCount: 0, pinLockedUntil: null },
+  });
 }
 
+// Forward-progress rank table. Only transitions to a higher rank are allowed,
+// except CANCELLED (rank 99) which is always reachable from any state.
+//
+// CASH_PENDING (rank 4) sits above SERVED (rank 3):
+//   - CASH_PENDING → CANCELLED is intentionally allowed (staff voids a cash order).
+//   - CASH_PENDING → SERVED is blocked (a cash order cannot be marked served via KDS;
+//     it closes when staff taps "Cash Collected" on the floor dashboard instead).
 const STATUS_ORDER: Record<string, number> = {
   PENDING: 0,
   CONFIRMED: 1,
   PREPPING: 2,
   SERVED: 3,
-  CANCELLED: 99,
   CASH_PENDING: 4,
+  CANCELLED: 99,
 }
 
 export async function POST(

@@ -76,10 +76,26 @@ export function useSessionStream({
 
   useEffect(() => {
     connect()
+
+    // PRD §10.4: mobile browsers throttle backgrounded tabs. Re-establish the
+    // SSE connection and re-fetch full session state when the tab returns to visible
+    // so the KDS and diner tab never show stale data after lock/background.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        esRef.current?.close()
+        esRef.current = null
+        if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
+        retryDelayRef.current = 1000
+        connect()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
     return () => {
       esRef.current?.close()
       esRef.current = null
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [connect])
 }

@@ -57,7 +57,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.restaurantId = (user as { restaurantId: string }).restaurantId;
         token.staffId = (user as { staffId?: string }).staffId ?? null;
-        token.role = (user as { role: string }).role;
+        token.role = (user as { role: 'ADMIN' | 'MANAGER' | 'STAFF' }).role;
       }
       return token;
     },

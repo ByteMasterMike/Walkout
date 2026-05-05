@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { startOfDayInTz } from '@/lib/validate'
 
 const FloorAssignmentEntrySchema = z.object({
   tableId: z.string().uuid(),
@@ -21,8 +22,13 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  // Use restaurant's configured timezone so "today" reflects local midnight,
+  // not UTC midnight (which is 4–8h off for US timezones).
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: session.user.restaurantId },
+    select: { timezone: true },
+  })
+  const today = startOfDayInTz(restaurant?.timezone ?? 'America/New_York')
 
   const assignments = await prisma.tableAssignment.findMany({
     where: {
@@ -88,34 +94,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'One or more staff members not found' }, { status: 422 })
   }
 
-  // Deactivate existing active assignments for the affected tables
-  await prisma.tableAssignment.updateMany({
-    where: {
-      restaurantId,
-      tableId: { in: tableIds },
-      isActive: true,
-    },
-    data: { isActive: false, endedAt: new Date() },
-  })
-
-  // Create new assignments
-  const created = await prisma.$transaction(
-    parsed.data.assignments.map((a) =>
-      prisma.tableAssignment.create({
-        data: {
-          restaurantId,
-          tableId: a.tableId,
-          staffId: a.staffId,
-        },
-        select: {
-          id: true,
-          tableId: true,
-          staffId: true,
-          assignedAt: true,
-        },
-      })
+  // Deactivate old + create new in a single transaction so a crash/timeout
+  // never leaves tables with no active assignment.
+  const created = await prisma.$transaction(async (tx) => {
+    await tx.tableAssignment.updateMany({
+      where: { restaurantId, tableId: { in: tableIds }, isActive: true },
+      data: { isActive: false, endedAt: new Date() },
+    })
+    return Promise.all(
+      parsed.data.assignments.map((a) =>
+        tx.tableAssignment.create({
+          data: { restaurantId, tableId: a.tableId, staffId: a.staffId },
+          select: { id: true, tableId: true, staffId: true, assignedAt: true },
+        })
+      )
     )
-  )
+  })
 
   return NextResponse.json({ assignments: created }, { status: 201 })
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { startOfDayInTz } from '@/lib/validate'
 
 export async function GET() {
   const session = await auth()
@@ -11,8 +12,11 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: session.user.restaurantId },
+    select: { timezone: true },
+  })
+  const today = startOfDayInTz(restaurant?.timezone ?? 'America/New_York')
 
   // Find the most recent prior-day assignments (before today)
   const assignments = await prisma.tableAssignment.findMany({

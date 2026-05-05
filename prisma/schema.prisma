@@ -239,8 +239,10 @@ model RestaurantStaff {
   invitedAt      DateTime     @default(now())
   acceptedAt     DateTime?
 
-  isKdsDevice    Boolean      @default(false)
-  kdsDevicePin   String?
+  isKdsDevice      Boolean      @default(false)
+  kdsDevicePin     String?
+  pinAttemptCount  Int          @default(0)
+  pinLockedUntil   DateTime?
 
   stripeExpressAccountId String?
 
