@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/cleanup-tables",
-      "schedule": "0 3 * * *"
+      "path": "/api/cron/maintenance",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

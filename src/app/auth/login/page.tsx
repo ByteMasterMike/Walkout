@@ -5,13 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Spade } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import AuthPanel from '@/components/AuthPanel';
 
 function LoginForm() {
   const router = useRouter();
@@ -35,7 +33,7 @@ function LoginForm() {
     setError('');
     setLoading(true);
     try {
-      const result = await signIn('credentials', {
+      const result = await signIn('restaurant', {
         email: form.email,
         password: form.password,
         redirect: false,
@@ -54,32 +52,17 @@ function LoginForm() {
   };
 
   return (
-    <div className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-2">
-      {/* Left panel */}
-      <AuthPanel />
-
-      {/* Right panel — form */}
-      <div className="flex items-center justify-center px-6 py-12">
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: [0.25, 0.1, 0.25, 1] }}
-          className="w-full max-w-[400px]"
-        >
-          {/* Logo mark (mobile only) */}
-          <div className="mb-8 flex flex-col items-center gap-3 lg:hidden">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary shadow-[0_0_24px_rgba(249,115,22,0.4)]">
-              <Spade className="h-6 w-6 text-white" />
-            </div>
-            <p className="font-display text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              PokerPay
-            </p>
-          </div>
-
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.25, 0.1, 0.25, 1] }}
+        className="w-full max-w-[400px]"
+      >
           <Card className="border-border/60 bg-card shadow-xl shadow-black/5">
             <CardHeader className="pb-4 text-center">
               <CardTitle className="text-2xl font-extrabold tracking-tight">Welcome back</CardTitle>
-              <CardDescription>Sign in to your PokerPay account</CardDescription>
+              <CardDescription>Sign in to your WalkOut account</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {error && (
@@ -141,8 +124,7 @@ function LoginForm() {
               </p>
             </CardContent>
           </Card>
-        </motion.div>
-      </div>
+      </motion.div>
     </div>
   );
 }

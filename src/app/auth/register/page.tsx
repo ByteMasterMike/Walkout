@@ -2,153 +2,151 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { Spade } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Alert } from '@/components/ui/alert';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import AuthPanel from '@/components/AuthPanel';
+import { signIn } from 'next-auth/react';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
-    try {
-      const res = await fetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Registration failed');
-        setLoading(false);
-        return;
-      }
-      const signInResult = await signIn('credentials', {
-        email: form.email,
-        password: form.password,
-        redirect: false,
-      });
-      if (signInResult?.error) {
-        setError('Account created. Please sign in manually.');
-        router.push('/auth/login');
-      } else {
-        router.push('/dashboard');
-        router.refresh();
-      }
-    } catch {
-      setError('Something went wrong. Please try again.');
-    } finally {
+
+    const form = new FormData(e.currentTarget);
+    const data = {
+      name: form.get('name') as string,
+      email: form.get('email') as string,
+      password: form.get('password') as string,
+      city: form.get('city') as string,
+      state: form.get('state') as string,
+    };
+
+    const res = await fetch('/api/restaurant/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? 'Registration failed. Please try again.');
       setLoading(false);
+      return;
     }
-  };
+
+    // Auto sign in after registration
+    const signInResult = await signIn('restaurant', {
+      email: data.email,
+      password: data.password,
+      redirect: false,
+    });
+
+    if (signInResult?.ok) {
+      router.push('/dashboard');
+    } else {
+      router.push('/auth/login');
+    }
+  }
 
   return (
-    <div className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-2">
-      {/* Left panel */}
-      <AuthPanel />
+    <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Create your WalkOut account</h1>
+        <p className="text-sm text-gray-500 mb-6">Free. No hardware. No contract.</p>
 
-      {/* Right panel — form */}
-      <div className="flex items-center justify-center px-6 py-12">
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: [0.25, 0.1, 0.25, 1] }}
-          className="w-full max-w-[400px]"
-        >
-          {/* Logo mark (mobile only) */}
-          <div className="mb-8 flex flex-col items-center gap-3 lg:hidden">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary shadow-[0_0_24px_rgba(249,115,22,0.4)]">
-              <Spade className="h-6 w-6 text-white" />
-            </div>
-            <p className="font-display text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              PokerPay
-            </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+              Restaurant name
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+            />
           </div>
 
-          <Card className="border-border/60 bg-card shadow-xl shadow-black/5">
-            <CardHeader className="pb-4 text-center">
-              <CardTitle className="text-2xl font-extrabold tracking-tight">Create account</CardTitle>
-              <CardDescription>Join PokerPay and start playing</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <span className="text-sm">⚠ {error}</span>
-                </Alert>
-              )}
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              Owner email
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+            />
+          </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required
-                  />
-                </div>
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              minLength={8}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+            />
+          </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    required
-                  />
-                </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
+                City
+              </label>
+              <input
+                id="city"
+                name="city"
+                type="text"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              />
+            </div>
+            <div>
+              <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-1">
+                State
+              </label>
+              <input
+                id="state"
+                name="state"
+                type="text"
+                maxLength={2}
+                placeholder="PA"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              />
+            </div>
+          </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="At least 8 characters"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    minLength={8}
-                    required
-                  />
-                </div>
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
 
-                <Button type="submit" className="w-full" size="lg" disabled={loading}>
-                  {loading ? (
-                    <span className="flex items-center gap-2">
-                      <span className="spinner" />
-                      Creating Account…
-                    </span>
-                  ) : (
-                    'Create Account'
-                  )}
-                </Button>
-              </form>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-black text-white rounded-lg py-2.5 text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
+          >
+            {loading ? 'Creating account...' : 'Create account'}
+          </button>
+        </form>
 
-              <p className="text-center text-xs text-muted-foreground">
-                Already have an account?{' '}
-                <Link href="/auth/login" className="font-semibold text-primary">
-                  Sign in
-                </Link>
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
+        <p className="mt-4 text-center text-sm text-gray-500">
+          Already have an account?{' '}
+          <Link href="/auth/login" className="text-black font-medium hover:underline">
+            Sign in
+          </Link>
+        </p>
       </div>
-    </div>
+    </main>
   );
 }

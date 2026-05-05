@@ -6,8 +6,7 @@ const nextConfig: NextConfig = {
       {
         source: '/(.*)',
         headers: [
-          // Camera restricted to same origin only
-          { key: 'Permissions-Policy', value: 'camera=(self)' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
           // Prevent MIME-type sniffing
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           // Block clickjacking
@@ -23,16 +22,13 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              // Next.js inline scripts + Google Fonts
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
               // Styles: self + Google Fonts
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               // Fonts: self + Google Fonts CDN
               "font-src 'self' https://fonts.gstatic.com",
-              // Images: self + data URIs (for QR codes) + R2 stack photos
-              "img-src 'self' data: blob: https://pub-9e31adc34489458694a4a47d7b6a2b47.r2.dev",
-              // Camera access for QR scanner
-              "media-src 'self' blob:",
+              "img-src 'self' data: blob: https://images.walkoutofficial.com",
+              "media-src 'self'",
               // API calls: self + external APIs
               "connect-src 'self' https://*.supabase.com https://generativelanguage.googleapis.com",
               // No iframes

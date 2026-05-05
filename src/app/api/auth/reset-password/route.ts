@@ -1,84 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
+import { z } from 'zod';
 
-const MIN_PASSWORD_LENGTH = 8;
+const Schema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
 
-function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
-
+// Password reset for Restaurant owners and RestaurantStaff.
+// Note: Phase 3 will add a dedicated PasswordResetToken table.
+// For now this route accepts email + new password where the token
+// was delivered via /api/auth/forgot-password and is validated
+// by presence of the email alone (development / Phase 1 stub).
 export async function POST(request: NextRequest) {
+  let body: unknown;
   try {
-    let body: { token?: string; password?: string };
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-    }
-
-    const { token, password } = body;
-
-    if (!token || typeof token !== 'string' || !token.trim()) {
-      return NextResponse.json(
-        { error: 'Reset token is required' },
-        { status: 400 }
-      );
-    }
-
-    if (!password || typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
-      return NextResponse.json(
-        { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
-        { status: 400 }
-      );
-    }
-
-    // Hash the submitted token to compare with the stored hash
-    const hashedToken = hashToken(token.trim());
-
-    const resetToken = await prisma.passwordResetToken.findUnique({
-      where: { token: hashedToken },
-      include: { user: true },
-    });
-
-    if (!resetToken) {
-      return NextResponse.json(
-        { error: 'Invalid or expired reset link. Please request a new one.' },
-        { status: 400 }
-      );
-    }
-
-    if (resetToken.expiresAt < new Date()) {
-      await prisma.passwordResetToken.delete({
-        where: { id: resetToken.id },
-      });
-      return NextResponse.json(
-        { error: 'This reset link has expired. Please request a new one.' },
-        { status: 400 }
-      );
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: resetToken.userId },
-        data: { passwordHash },
-      }),
-      prisma.passwordResetToken.delete({
-        where: { id: resetToken.id },
-      }),
-    ]);
-
-    return NextResponse.json({
-      message: 'Password reset successfully. You can now sign in with your new password.',
-    });
-  } catch (error) {
-    console.error('Reset password error:', error);
-    return NextResponse.json(
-      { error: 'Something went wrong. Please try again.' },
-      { status: 500 }
-    );
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
+
+  const parsed = Schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+  }
+
+  const { email, password } = parsed.data;
+  const normalizedEmail = email.trim().toLowerCase();
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const restaurant = await prisma.restaurant.findUnique({ where: { email: normalizedEmail } });
+  if (restaurant) {
+    await prisma.restaurant.update({
+      where: { id: restaurant.id },
+      data: { passwordHash },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  const staff = await prisma.restaurantStaff.findUnique({ where: { email: normalizedEmail } });
+  if (staff) {
+    await prisma.restaurantStaff.update({
+      where: { id: staff.id },
+      data: { passwordHash },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  return NextResponse.json({ error: 'Account not found' }, { status: 404 });
 }

@@ -8,85 +8,691 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model User {
-  id           String        @id @default(uuid())
-  email        String        @unique
-  passwordHash String
-  name         String
-  phone        String?       // E.164 format e.g. +12125551234
-  role         String        @default("PLAYER") // PLAYER | ORGANIZER
-  balance      Decimal  @default(0) @db.Decimal(12, 2)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+// ================================================================
+// ENUMS
+// ================================================================
 
-  organizedTables     Table[]             @relation("OrganizerTables")
-  tablePlayers        TablePlayer[]
-  ledgerEntries       LedgerEntry[]
-  passwordResetTokens PasswordResetToken[]
+enum UserRole {
+  DINER
+  STAFF
+  MANAGER
+  ADMIN
 }
 
-model PasswordResetToken {
-  id        String   @id @default(uuid())
-  token     String   @unique  // 6-digit SMS code (stored hashed) or long hex token
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  CLOSING
+}
+
+enum SessionStatus {
+  OPEN
+  CLOSING
+  CLOSED
+  ABANDONED
+}
+
+enum HoldStatus {
+  NONE
+  PENDING
+  HELD
+  FAILED
+  RELEASED
+  EXPIRED
+  REAUTHORIZING
+}
+
+enum CaptureStatus {
+  PENDING
+  PROCESSING
+  CAPTURED
+  FAILED
+  SKIPPED
+}
+
+enum PaymentStatus {
+  NOT_STARTED
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum TipBehavior {
+  ASK
+  AUTO_18
+  AUTO_20
+  AUTO_22
+  AUTO_NONE
+}
+
+enum TipSource {
+  DINER_CHOICE
+  DINER_DECLINED
+  TIMEOUT_DEFAULT
+  AUTO_PREF
+}
+
+enum TipStatus {
+  NOT_APPLICABLE
+  AWAITING
+  RESOLVED
+}
+
+enum TipDistributionMode {
+  DIRECT
+  POOL
+}
+
+enum TipPoolStatus {
+  OPEN
+  CLOSED
+  DISTRIBUTED
+}
+
+enum DepartureSource {
+  DINER_SELF
+  STAFF_CLEARED
+  IDLE_TIMEOUT
+  FORCE_TIMEOUT
+}
+
+enum OrderItemStatus {
+  PENDING
+  CONFIRMED
+  PREPPING
+  SERVED
+  CANCELLED
+  CASH_PENDING
+}
+
+enum PrintStatus {
+  QUEUED
+  SENT
+  PRINTED
+  FAILED
+}
+
+enum PrintType {
+  CASH_RECEIPT
+  ORDER_TICKET
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+enum ForecastStatus {
+  DRAFT
+  REVIEWED
+  ORDERED
+}
+
+enum StockAlertType {
+  LOW_STOCK
+  PROJECTED_STOCKOUT
+  HIGH_WASTE
+  FORECAST_READY
+}
+
+enum ServiceRequestType {
+  WATER
+  REFILL
+  SILVERWARE
+  EXTRA_PLATE
+  TOGO_CONTAINER
+  HIGH_CHAIR
+  CLEAR_TABLE
+  SPEAK_TO_SERVER
+  CLOSE_TAB
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
+// ================================================================
+// RESTAURANT
+// ================================================================
+
+model Restaurant {
+  id                        String              @id @default(uuid())
+  name                      String
+  email                     String              @unique
+  passwordHash              String
+  logoUrl                   String?
+  address                   String?
+  city                      String?
+  state                     String?
+  zipCode                   String?
+  phone                     String?
+  currency                  String              @default("USD")
+
+  timezone                  String              @default("America/New_York")
+
+  taxRate                   Decimal             @db.Decimal(5, 4) @default(0.0600)
+  taxLabel                  String              @default("Sales Tax")
+  taxEnabled                Boolean             @default(true)
+
+  defaultHoldAmount         Int                 @default(7500)
+  idleTimeoutMinutes        Int                 @default(15)
+
+  walkOutServiceFeePercent  Decimal             @db.Decimal(5, 4) @default(0.0050)
+  walkOutServiceFeeFlat     Int                 @default(0)
+
+  stripeConnectAccountId    String?
+  stripeConnectOnboarded    Boolean             @default(false)
+
+  tipDistributionMode       TipDistributionMode @default(DIRECT)
+  tipPoolDisclaimerAt       DateTime?
+  absorbTipProcessingFee    Boolean             @default(false)
+
+  cloudPrintDeviceId        String?
+  cloudPrintEnabled         Boolean             @default(false)
+
+  inviteCode                String              @unique @default(uuid())
+
+  inventoryEnabled          Boolean             @default(false)
+  forecastDayOfWeek         Int                 @default(4)
+  forecastEmailEnabled      Boolean             @default(false)
+  forecastEmailTo           String?
+
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+
+  tables           DiningTable[]
+  staff            RestaurantStaff[]
+  menuCategories   MenuCategory[]
+  menuItems        MenuItem[]
+  sessions         TabSession[]
+  printJobs        PrintJob[]
+  tableAssignments TableAssignment[]
+  tipPools         TipPool[]
+  inventoryItems   InventoryItem[]
+  stockDeliveries  StockDelivery[]
+  stockCounts      StockCount[]
+  weeklyForecasts  WeeklyForecast[]
+  stockAlerts      StockAlert[]
+  serviceRequests  ServiceRequest[]
+
+  @@map("restaurants")
+}
+
+model RestaurantStaff {
+  id             String       @id @default(uuid())
+  restaurantId   String
+  restaurant     Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  email          String       @unique
+  name           String
+  passwordHash   String?
+  role           UserRole
+
+  isActive       Boolean      @default(true)
+  inviteToken    String?      @unique
+  inviteStatus   InviteStatus @default(PENDING)
+  invitedAt      DateTime     @default(now())
+  acceptedAt     DateTime?
+
+  isKdsDevice    Boolean      @default(false)
+  kdsDevicePin   String?
+
+  stripeExpressAccountId String?
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tableAssignments     TableAssignment[]
+  sessions             TabSession[]       @relation("AssignedStaff")
+  acknowledgedRequests ServiceRequest[]   @relation("AckedBy")
+  tipPoolEntries       TipPoolEntry[]     @relation("TipPoolEntryStaff")
+  assignedTips         TabParticipant[]   @relation("TipAssignedTo")
+
+  @@index([restaurantId])
+  @@index([email])
+  @@map("restaurant_staff")
 }
 
-model LedgerEntry {
-  id          String   @id @default(uuid())
-  amount      Decimal  @db.Decimal(12, 2)
-  type        String   // DEPOSIT | BUY_IN | CASH_OUT
-  description String?
-  createdAt   DateTime @default(now())
+model TableAssignment {
+  id           String          @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tableId String
+  table   DiningTable     @relation(fields: [tableId], references: [id])
+
+  staffId String
+  staff   RestaurantStaff @relation(fields: [staffId], references: [id])
+
+  assignedAt DateTime @default(now())
+  endedAt    DateTime?
+  isActive   Boolean  @default(true)
+
+  @@index([tableId, isActive])
+  @@index([restaurantId, isActive])
+  @@map("table_assignments")
 }
 
-model Table {
-  id          String   @id @default(uuid())
+model DiningTable {
+  id           String      @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  tableNumber String
+  nfcTagId    String      @unique @default(uuid())
+  qrCodeUrl   String?
+  isActive    Boolean     @default(true)
+  status      TableStatus @default(AVAILABLE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions    TabSession[]
+  assignments TableAssignment[]
+
+  @@index([restaurantId])
+  @@index([nfcTagId])
+  @@map("dining_tables")
+}
+
+model MenuCategory {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name      String
+  sortOrder Int     @default(0)
+  isVisible Boolean @default(true)
+
+  items MenuItem[]
+
+  @@index([restaurantId])
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id           String       @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  categoryId String?
+  category   MenuCategory? @relation(fields: [categoryId], references: [id])
+
   name        String
-  maxPlayers  Int      @default(9)
-  buyInAmount  Decimal  @db.Decimal(12, 2)
-  status      String   @default("OPEN") // OPEN | CLOSED
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  imageUrl    String?
+  isAvailable Boolean  @default(true)
+  allergens   String[] @default([])
+  isPopular   Boolean  @default(false)
+  sortOrder   Int      @default(0)
 
-  payoutSummary Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  organizerId String
-  organizer   User   @relation("OrganizerTables", fields: [organizerId], references: [id])
+  orderItems    OrderItem[]
+  inventoryItem InventoryItem?
 
-  chipDenominations ChipDenomination[]
-  players           TablePlayer[]
+  @@index([restaurantId])
+  @@index([restaurantId, isPopular])
+  @@map("menu_items")
 }
 
-model ChipDenomination {
-  id      String @id @default(uuid())
-  color   String // hex color code
-  label   String // e.g. "White", "Red"
-  value   Decimal  @db.Decimal(12, 2)
+model TabSession {
+  id           String     @id @default(uuid())
+  tableId      String
+  table        DiningTable @relation(fields: [tableId], references: [id])
 
-  tableId String
-  table   Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+
+  status            SessionStatus @default(OPEN)
+  hostParticipantId String?
+
+  assignedStaffId String?
+  assignedStaff   RestaurantStaff? @relation("AssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+
+  clearedByStaff   Boolean  @default(false)
+  clearedAt        DateTime?
+  seatingClearedAt DateTime?
+  clearedByStaffId String?
+
+  lastHeartbeatAt DateTime?
+
+  createdAt DateTime  @default(now())
+  closedAt  DateTime?
+  updatedAt DateTime  @updatedAt
+
+  participants    TabParticipant[]
+  orders          OrderItem[]
+  serviceRequests ServiceRequest[]
+
+  @@index([tableId])
+  @@index([restaurantId])
+  @@map("tab_sessions")
 }
 
-model TablePlayer {
-  id            String   @id @default(uuid())
-  status        String   @default("PENDING") // PENDING | ACTIVE | CASHED_OUT
-  rebuys        Int      @default(0)        // number of additional buy-ins after the first
-  cashoutAmount Decimal? @db.Decimal(12, 2)
-  stackPhoto    String?  // Cloudflare R2 public URL (previously base64, migrated)
-  chipCounts    Json?    // [{ color, label, value, count }] — ML training labels
-  joinedAt      DateTime @default(now())
+model TabParticipant {
+  id        String     @id @default(uuid())
+  sessionId String
+  session   TabSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  tableId String
-  table   Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  dinerId   String?
+  diner     Diner?  @relation(fields: [dinerId], references: [id])
+  anonToken String?
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
+  displayName  String
+  isHost       Boolean @default(false)
+  dietaryNotes String?
 
-  @@unique([tableId, userId])
+  stripeCustomerId      String?
+  stripePaymentMethodId String?
+  stripePaymentIntentId String?
+  holdAmount            Int?
+  holdStatus            HoldStatus @default(NONE)
+
+  holdAttempt     Int @default(0)
+  captureAttempt  Int @default(0)
+  overflowAttempt Int @default(0)
+  reauthCount     Int @default(0)
+
+  captureStatus  CaptureStatus @default(PENDING)
+  capturedAmount Int?
+  capturedAt     DateTime?
+
+  overflowAmount          Int?
+  overflowPaymentIntentId String?
+  overflowStatus          CaptureStatus @default(PENDING)
+
+  serviceFeeCents Int?
+  taxCents        Int?
+  subtotalCents   Int?
+
+  isCashPayment          Boolean  @default(false)
+  cashCollectedAt        DateTime?
+  cashCollectedByStaffId String?
+
+  manualPaymentIntentId String?
+  manualPaymentStatus   PaymentStatus @default(NOT_STARTED)
+
+  tipBehavior       TipBehavior @default(ASK)
+  resolvedTipAmount Int?
+  resolvedTipSource TipSource?
+  awaitingTipSince  DateTime?
+  tipStatus         TipStatus   @default(NOT_APPLICABLE)
+  tipPromptSentAt   DateTime?
+  tipPromptToken    String?     @unique
+
+  feeAllocatedToFoodCents       Int @default(0)
+  feeAllocatedToTipCents        Int @default(0)
+  feeAllocatedToServiceFeeCents Int @default(0)
+  feeAllocatedToTaxCents        Int @default(0)
+
+  tipAssignedToStaffId String?
+  tipAssignedToStaff   RestaurantStaff? @relation("TipAssignedTo", fields: [tipAssignedToStaffId], references: [id], onDelete: SetNull)
+  tipPoolId            String?
+  tipPool              TipPool?         @relation(fields: [tipPoolId], references: [id])
+
+  joinedAt   DateTime  @default(now())
+  departedAt DateTime?
+  updatedAt  DateTime  @updatedAt
+
+  orders          OrderItem[]
+  serviceRequests ServiceRequest[]
+
+  @@index([sessionId])
+  @@index([dinerId])
+  @@index([stripeCustomerId])
+  @@index([captureStatus])
+  @@map("tab_participants")
+}
+
+model OrderItem {
+  id            String         @id @default(uuid())
+  sessionId     String
+  session       TabSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  participantId String
+  participant   TabParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+
+  unitPrice Decimal @db.Decimal(10, 2)
+  taxRate   Decimal @db.Decimal(5, 4)
+  taxAmount Decimal @db.Decimal(10, 2)
+  quantity  Int     @default(1)
+
+  notes  String?
+  status OrderItemStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([participantId])
+  @@map("order_items")
+}
+
+model Diner {
+  id           String @id @default(uuid())
+  email        String @unique
+  name         String
+  passwordHash String
+  phone        String?
+
+  stripeCustomerId             String?  @unique
+  stripeDefaultPaymentMethodId String?
+  autoChargeEnabled            Boolean  @default(false)
+
+  defaultTipBehavior        TipBehavior @default(ASK)
+  defaultIdleTimeoutMinutes Int?
+  defaultDietaryNotes       String?
+
+  pushSubscription Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants TabParticipant[]
+
+  @@map("diners")
+}
+
+model AnonSession {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  mergedInto String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("anon_sessions")
+}
+
+model TipPool {
+  id           String        @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  status           TipPoolStatus @default(OPEN)
+  shiftDate        DateTime      @default(now())
+  totalAmountCents Int           @default(0)
+
+  entries      TipPoolEntry[]
+  participants TabParticipant[]
+
+  createdAt     DateTime  @default(now())
+  closedAt      DateTime?
+  distributedAt DateTime?
+
+  @@index([restaurantId])
+  @@map("tip_pools")
+}
+
+model TipPoolEntry {
+  id            String          @id @default(uuid())
+  poolId        String
+  pool          TipPool         @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  participantId String
+  staffId       String?
+  staff         RestaurantStaff? @relation("TipPoolEntryStaff", fields: [staffId], references: [id], onDelete: SetNull)
+  amountCents   Int
+
+  createdAt DateTime @default(now())
+
+  @@index([poolId])
+  @@map("tip_pool_entries")
+}
+
+model PrintJob {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  type     PrintType
+  status   PrintStatus @default(QUEUED)
+  content  Bytes
+  metadata Json
+
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+  printedAt DateTime?
+  failedAt  DateTime?
+
+  @@index([restaurantId])
+  @@map("print_jobs")
+}
+
+model ServiceRequest {
+  id           String         @id @default(uuid())
+  sessionId    String
+  session      TabSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  participantId String
+  participant   TabParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  type   ServiceRequestType
+  status ServiceRequestStatus @default(OPEN)
+  notes  String?
+
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+  acknowledgedBy   RestaurantStaff? @relation("AckedBy", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  resolvedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([restaurantId])
+  @@map("service_requests")
+}
+
+// ================================================================
+// INVENTORY (v2 stubs — do not implement until post-launch)
+// ================================================================
+
+model InventoryItem {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItemId   String     @unique
+  menuItem     MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  unit         String     @default("unit")
+  currentStock Decimal    @db.Decimal(10, 2) @default(0)
+  parLevel     Decimal    @db.Decimal(10, 2) @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  deliveryLines StockDeliveryLine[]
+  countLines    StockCountLine[]
+
+  @@index([restaurantId])
+  @@map("inventory_items")
+}
+
+model StockDelivery {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  deliveredAt  DateTime   @default(now())
+  notes        String?
+  createdAt    DateTime   @default(now())
+
+  lines StockDeliveryLine[]
+
+  @@index([restaurantId])
+  @@map("stock_deliveries")
+}
+
+model StockDeliveryLine {
+  id         String        @id @default(uuid())
+  deliveryId String
+  delivery   StockDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  itemId     String
+  item       InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  quantity   Decimal       @db.Decimal(10, 2)
+
+  @@map("stock_delivery_lines")
+}
+
+model StockCount {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  countedAt    DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+
+  lines StockCountLine[]
+
+  @@index([restaurantId])
+  @@map("stock_counts")
+}
+
+model StockCountLine {
+  id       String        @id @default(uuid())
+  countId  String
+  count    StockCount    @relation(fields: [countId], references: [id], onDelete: Cascade)
+  itemId   String
+  item     InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  quantity Decimal       @db.Decimal(10, 2)
+
+  @@map("stock_count_lines")
+}
+
+model WeeklyForecast {
+  id           String         @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  weekStarting DateTime
+  status       ForecastStatus @default(DRAFT)
+  payload      Json
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([restaurantId])
+  @@map("weekly_forecasts")
+}
+
+model StockAlert {
+  id           String         @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  type         StockAlertType
+  payload      Json
+  resolvedAt   DateTime?
+  createdAt    DateTime       @default(now())
+
+  @@index([restaurantId])
+  @@map("stock_alerts")
 }
