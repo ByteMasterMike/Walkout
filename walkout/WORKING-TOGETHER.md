@@ -4,7 +4,7 @@ This is the playbook for two-person concurrent development on WalkOut. Read it o
 
 ## Roles
 
-**Michael (technical co-founder, Claude Code)** — Track A. Owns server-side: Prisma schema, migrations, API routes, payment logic, webhooks, cron, auth/RBAC, infrastructure. Schema authority — only Michael writes migrations.
+**Michael (technical co-founder, Cursor)** — Track A. Owns server-side: Prisma schema, migrations, API routes, payment logic, webhooks, cron, auth/RBAC, infrastructure. Schema authority — only Michael writes migrations.
 
 **Cofounder (business/ops, Cursor 3 with AI assist)** — Track B. Owns client-side: dashboard UI, diner PWA pages, KDS UI, floor setup UI, menu admin UI, notifications display. Consumes the APIs Michael builds.
 
@@ -252,7 +252,7 @@ If the cofounder DID run `prisma migrate dev` against Rule 3: ping Michael. Mich
 
 - Marketing, sales, restaurant outreach. That's `#walkout-ops` territory.
 - Specific PRD content. That lives in `docs/prd/`.
-- Per-agent behavior. That lives in `.claude/agents/` and `.cursor/agents/`.
+- Per-agent behavior. That lives in `.cursor/agents/`.
 - Personnel decisions. If the working dynamic isn't working, talk in person, not via this doc.
 
 ## When to Update This Doc

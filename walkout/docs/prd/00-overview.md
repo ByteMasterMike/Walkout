@@ -2,7 +2,7 @@
 
 **Read first. Every agent loads this module.**
 
-Source: WALKOUT PRD v5.2 (April 2026). Sections 1–5 of the full PRD. For details beyond what is here, see the module map in `CLAUDE.md`.
+Source: WALKOUT PRD v5.2 (April 2026). Sections 1–5 of the full PRD. For details beyond what is here, see the module index in `MICHAEL.md` (technical lead manual).
 
 ---
 

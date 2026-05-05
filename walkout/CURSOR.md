@@ -2,7 +2,9 @@
 
 Operating manual for Cursor 3 on this repo. This file gets read by Cursor's agents on every task. The PRD under `docs/prd/` is the source of truth for what to build; this file is the source of truth for **how**.
 
-This is the cofounder-side counterpart to `CLAUDE.md`. Both files coexist — they reference the same PRD modules and enforce the same rules. The differences are tooling (`.cursor/agents/` vs `.claude/agents/`) and a bit more guidance for AI-assisted work.
+**Partner doc:** **`MICHAEL.md`** — technical lead playbook for Michael (Cursor). Same architectural rules plus the canonical PRD module index, complete payment invariant list, migration ownership, and agent roster wording reviewers use.
+
+This file assumes you use Cursor as the cofounder. You and Michael share **`.cursor/agents/`**, `@mentions`, and the same standards; this doc is onboarding tone — not a weaker ruleset.
 
 ## Project (one-paragraph version)
 
@@ -11,7 +13,7 @@ WalkOut is a restaurant payment + operating system. A diner taps an NFC sticker 
 ## Stack — what these words mean if you're new
 
 - **Next.js 16**: the web framework. Pages live under `src/app/`. API routes live under `src/app/api/`. Same codebase serves the website and the API.
-- **Prisma**: the database library. The schema is in `prisma/schema.prisma`. When you change it, you run `npx prisma migrate dev` to update the database. Migrations live under `prisma/migrations/`.
+- **Prisma**: the database library. The schema is in `prisma/schema.prisma`. Migrations land under `prisma/migrations/`. **`npx prisma migrate dev` is Michael only** — if you need a schema change, request it via the playbook in Working Together (two divergent migration branches do not merge cleanly).
 - **Supabase**: hosted Postgres. Plus a real-time service that broadcasts database changes — we use it for the live table grid and KDS.
 - **Stripe Connect**: the payments. WalkOut is the "platform"; each restaurant has a "connected account". Money flows directly from diner → restaurant, with WalkOut taking a cut on top.
 - **`decimal.js`**: a money math library. Floating-point numbers (`0.1 + 0.2 = 0.30000000000000004`) lose pennies on big tabs. We use Decimal everywhere we touch money, then convert to integer cents only at the final Stripe call.
@@ -65,13 +67,13 @@ Two rules worth pulling out here:
 - **Schema migrations are serialized through Michael.** If you need a new column or a new model, ask in Slack — don't run `prisma migrate dev` yourself. The reason is that two divergent migration directories can't be merged cleanly, and Prisma will get confused. This is the single biggest cause of "we lost a day" for two-person teams.
 - **One PRD module per branch.** A branch named `feat/menu-crud` should only touch files described in module 05. If you need to touch payment code AND dashboard UI in the same change, the `orchestrator` agent should split it into two branches with a handoff point. Don't try to do both at once.
 
-## Cursor 3 Setup
+## Cursor setup
 
-Agents live in `.cursor/agents/`. They mirror the Claude Code agents in `.claude/agents/`. You don't need to set them up — they're already in the repo.
+Agents live in `.cursor/agents/` — already in the repo. There is **no Claude Code subtree** and no separate Task-tool dispatch model; Michael delegates with `@mentions` the same way you do.
 
 The agents you'll use most often:
 
-- **`@orchestrator`** — start here for any feature that's bigger than a one-file change. It will break the work into subtasks and dispatch the right specialists. Particularly useful when the PRD spans multiple modules and you'd otherwise have to figure out which to load.
+- **`@orchestrator`** — start here for any feature that's bigger than a one-file change. It will break the work into subtasks and name the specialists to `@mention` next. Particularly useful when the PRD spans multiple modules.
 - **`@code-reviewer`** — run before every PR. It catches bugs, missing error handling, and convention violations. Don't merge until its verdict is APPROVE or WARNING (with reason). BLOCK means stop and fix.
 - **`@security-reviewer`** — run on anything that touches payments, auth, tokens, webhooks, or RBAC. This is the agent that catches the "an attacker could manipulate this URL to charge a different card" class of bug. If you're working on UI only, you won't need it as often.
 - **`@database-reviewer`** — only relevant when there's a migration. Michael owns migrations, so you'll rarely invoke this. If you do touch a query and it feels slow, this agent can suggest indexes.
