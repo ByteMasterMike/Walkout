@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
+import { assignServerToSession } from '@/lib/session';
 
 const JoinSchema = z.object({
   displayName: z.string().min(1).max(60),
@@ -101,6 +102,9 @@ export async function POST(
       data: { hostParticipantId: participant.id },
     });
   }
+
+  // Assign the active server for this table (best-effort, no error on miss)
+  await assignServerToSession(session.id, table.restaurantId);
 
   // Set httpOnly anon cookie (24h, secure, SameSite=lax)
   const cookieStore = await cookies();
