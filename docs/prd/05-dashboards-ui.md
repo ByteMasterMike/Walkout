@@ -123,7 +123,7 @@ src/app/dashboard/
 ├── setup/
 │   ├── page.tsx            Tables, NFC URLs, Stripe Connect, printer
 │   └── staff/
-│       └── page.tsx        Staff list, invite, KDS logout, ADMIN only
+│       └── page.tsx        Staff list (MGR+ADMIN); invite + KDS logout (ADMIN only)
 └── inventory/              v2
 ```
 
@@ -131,8 +131,8 @@ src/app/dashboard/
 
 ```
 [ALL ROLES]:     🍽 Live Tables · 📟 Kitchen · 🔔 Requests
-[MGR + ADMIN]:   🗂 Floor Setup · 📋 Menu · 📊 Analytics · 🧾 Settlements
-[ADMIN ONLY]:    ⚙️ Setup · 👥 Staff · 💳 Stripe Payouts
+[MGR + ADMIN]:   🗂 Floor Setup · 📋 Menu · 📊 Analytics · 🧾 Settlements · 👥 Staff
+[ADMIN ONLY]:    ⚙️ Setup · 💳 Stripe Payouts
 [V2, MGR+ADMIN]: 📦 Inventory
 ```
 
