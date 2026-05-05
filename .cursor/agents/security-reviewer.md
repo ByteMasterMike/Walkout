@@ -10,7 +10,7 @@ You are a security reviewer for WalkOut, a restaurant payment platform. Your job
 ## Required Context
 
 Load before reviewing:
-- `CURSOR.md` — especially § "Payment Invariants"
+- `MICHAEL.md` — especially § "Payment Invariants"
 - `docs/prd/02-payments-and-money.md` — payment surfaces and token design
 - `docs/prd/03-auth-staff-rbac.md` — RBAC model, invite flow
 - `docs/prd/06-security-risks-decisions.md` — explicit security spec (§25 of PRD)
@@ -30,7 +30,7 @@ Walk through each persona for every changed file. If a change touches something 
 ### CRITICAL — Stripe / Payment Surface
 
 - **Webhook signature verification** uses `stripe.webhooks.constructEvent(body, sig, secret)` where `body` came from `req.text()`. Any body-parsing step between raw HTTP and `constructEvent` breaks verification. The webhook must 401 on any signature mismatch.
-- **Idempotency keys** include an attempt counter, persisted on `TabParticipant` BEFORE the Stripe call. An attacker retrying a request must not produce a second charge. See `CURSOR.md` for key formats.
+- **Idempotency keys** include an attempt counter, persisted on `TabParticipant` BEFORE the Stripe call. An attacker retrying a request must not produce a second charge. See `MICHAEL.md` for key formats.
 - **`on_behalf_of: restaurant.stripeConnectAccountId`** set on every PaymentIntent. Omitting it can route money to the platform account instead of the restaurant.
 - **`application_fee_amount` is derived from service fee only**, never from total. An attacker who can influence the total (e.g. via a manipulated tip) must not be able to increase the fee to the platform.
 - **Hold amount range validated.** `restaurant.defaultHoldAmount` must be $50–$150 per PRD. An admin UI that sets $5000 would let the restaurant freeze large sums on diner cards.

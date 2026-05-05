@@ -21,9 +21,9 @@ If the request is small and single-domain (e.g. "fix this TypeScript error in on
 
 Always load, in order:
 
-1. **`CURSOR.md`** — project rules and invariants. Every plan must respect these.
+1. **`MICHAEL.md`** — project rules and invariants. Every plan must respect these.
 2. **`docs/prd/00-overview.md`** — strategic context and user flows.
-3. **The PRD modules relevant to the task.** Use the mapping in `CURSOR.md` § "PRD Module Map". Load only what the task actually needs. Do not dump the entire PRD into every subagent's context.
+3. **The PRD modules relevant to the task.** Use the mapping in `MICHAEL.md` § "PRD Modules". Load only what the task actually needs. Do not dump the entire PRD into every subagent's context.
 4. **Any existing code** that touches the affected area. Run `git grep` or `glob` to find it. If you cannot locate prior art in under 3 searches, invoke the `code-explorer` agent for a map.
 
 ## Decomposition Process
@@ -44,7 +44,7 @@ Always load, in order:
 
 - **Minimum viable context per agent.** Recommend each specialist load only the PRD modules and source files they need. Do not suggest the full PRD as context.
 - **Never recommend more than 3 agents in parallel.** Sequence-dependent subtasks must run in order. Identify what can truly run in parallel and what has hard dependencies.
-- **Always reference the invariant list** from `CURSOR.md` § "Payment Invariants" in payment-related subtasks. These are the tests the output must pass.
+- **Always reference the invariant list** from `MICHAEL.md` § "Payment Invariants" in payment-related subtasks. These are the tests the output must pass.
 - **Pass the git branch name and the intended commit scope** in your plan so the user can scope each specialist's work to the right files.
 
 ## Specialist Agent Reference
@@ -80,7 +80,7 @@ Risk level: <LOW | MEDIUM | HIGH>
 2. [owner-agent] ...
 
 ### Invariants to preserve
-- <invariant from CURSOR.md that applies>
+- <invariant from MICHAEL.md that applies>
 
 ### Open questions before we start
 - <anything the PRD does not answer or contradicts itself on>
@@ -89,9 +89,9 @@ Risk level: <LOW | MEDIUM | HIGH>
 ## After Subagents Report Back
 
 1. **Reconcile conflicts.** If two subagents produced incompatible recommendations, resolve against the PRD. If the PRD is silent, escalate to the user with the trade-off named.
-2. **Verify invariants.** Before declaring a feature done, confirm every relevant invariant from `CURSOR.md` still holds in the integrated output. Run the test suite if one exists for the affected area.
+2. **Verify invariants.** Before declaring a feature done, confirm every relevant invariant from `MICHAEL.md` still holds in the integrated output. Run the test suite if one exists for the affected area.
 3. **Write the integration summary.** Include: what was built, which PRD sections were implemented, which tests passed, which issues the reviewers flagged and how they were resolved, what is NOT yet done and deferred to a follow-up.
-4. **Never mark a task complete** if `security-reviewer` or `code-reviewer` returned CRITICAL issues. Those block merge per `CURSOR.md`.
+4. **Never mark a task complete** if `security-reviewer` or `code-reviewer` returned CRITICAL issues. Those block merge per `MICHAEL.md`.
 
 ## Anti-Patterns (do not do these)
 

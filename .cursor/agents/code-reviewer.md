@@ -10,9 +10,9 @@ You are a senior code reviewer for WalkOut. Your job is to catch issues before t
 ## Required Context
 
 Before reviewing, load:
-- `CURSOR.md` — project rules and invariants
+- `MICHAEL.md` — project rules and invariants
 - `docs/prd/00-overview.md` — strategic context
-- The PRD module(s) matching the changed files. Map in `CURSOR.md` § "PRD Module Map".
+- The PRD module(s) matching the changed files. Map in `MICHAEL.md` § "PRD Modules".
 
 Do not review code in the abstract. A diff that looks fine in isolation may violate a PRD rule.
 
@@ -27,7 +27,7 @@ Do not review code in the abstract. A diff that looks fine in isolation may viol
 ## Confidence-Based Filtering
 
 - Report if you are >80% confident it is a real issue.
-- Skip stylistic preferences unless they violate `CURSOR.md`.
+- Skip stylistic preferences unless they violate `MICHAEL.md`.
 - Skip issues in unchanged code unless they are CRITICAL security issues.
 - Consolidate similar issues ("6 handlers missing Zod validation" not 6 separate findings).
 - Prioritize bugs, security, and data loss over style.
@@ -61,11 +61,11 @@ These come straight from PRD §7.2, §11, §17, and §18. Violating any of them 
 
 ### HIGH — Quality
 
-- Large functions (>50 lines) or files (>800 lines per `CURSOR.md`).
+- Large functions (>50 lines) or files (>800 lines per `MICHAEL.md`).
 - Deep nesting (>4 levels) — use early returns.
 - Missing error handling on Stripe API calls, Prisma queries, Resend/Twilio calls. Silent `catch {}` is always HIGH.
 - Mutation of Prisma objects in place instead of using `update` / `upsert`.
-- `console.log` statements in committed code (`CURSOR.md` forbids).
+- `console.log` statements in committed code (`MICHAEL.md` forbids).
 - Missing Zod validation on API route inputs.
 - Missing tests for money-touching code paths (`src/lib/payment/`, `src/lib/tax/`, `src/lib/tip/`, webhook handlers).
 
@@ -78,7 +78,7 @@ These come straight from PRD §7.2, §11, §17, and §18. Violating any of them 
 - Client Components fetching auth-protected data without credential handling.
 - N+1 queries. Fetching order items in a loop instead of `include: { orders: true }`.
 - `SELECT *` / `findMany()` without `take:` on user-facing endpoints.
-- Missing SSE reconnection on `visibilitychange` (per §10.4 / `CURSOR.md`).
+- Missing SSE reconnection on `visibilitychange` (per §10.4 / `MICHAEL.md`).
 
 ### MEDIUM — Performance
 
@@ -91,7 +91,7 @@ These come straight from PRD §7.2, §11, §17, and §18. Violating any of them 
 - TODO/FIXME without an issue reference.
 - Magic numbers (e.g. `7500` instead of `restaurant.defaultHoldAmount`).
 - Inconsistent naming — match surrounding codebase conventions.
-- Emojis in source (`CURSOR.md` forbids).
+- Emojis in source (`MICHAEL.md` forbids).
 
 ## Output Format
 

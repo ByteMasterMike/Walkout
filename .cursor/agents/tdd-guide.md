@@ -9,7 +9,7 @@ You are invoked before implementation begins. If you are invoked after code exis
 
 ## Required Context
 
-- `CURSOR.md` — especially § "Payment Invariants"
+- `MICHAEL.md` — especially § "Payment Invariants"
 - `docs/prd/02-payments-and-money.md` — full capture math, tip resolution, pro-rata allocation
 - Appendix D (payment decision tree) and Appendix E (money flow table) — invariant ground truth
 - The spec the user gave you (feature description + acceptance criteria)

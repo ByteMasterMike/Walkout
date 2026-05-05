@@ -47,7 +47,7 @@ Do not load the full PRD every time. Most build errors are local.
 ### Next.js build errors
 
 **"Module not found: Can't resolve '@/lib/prisma'" in an edge route**
-- CRITICAL: Prisma is imported into a file that has `export const runtime = 'edge'`. Per `CURSOR.md`, Prisma is Node.js only. Move the route to Node.js runtime OR rewrite the query using the Supabase JS client at `@/lib/supabase`.
+- CRITICAL: Prisma is imported into a file that has `export const runtime = 'edge'`. Per `MICHAEL.md`, Prisma is Node.js only. Move the route to Node.js runtime OR rewrite the query using the Supabase JS client at `@/lib/supabase`.
 
 **"Dynamic server usage: headers/cookies/searchParams"**
 - The route is marked static but uses a runtime-only API. Either add `export const dynamic = 'force-dynamic'` (for App Router) or restructure to avoid the runtime call. Default to dynamic on any auth-protected route.

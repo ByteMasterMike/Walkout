@@ -870,4 +870,4 @@ All other line items (diner, WalkOut, Stripe, PA) are identical.
 7. Tax at capture is sum of `OrderItem.taxAmount`, never recomputed from `restaurant.taxRate`.
 8. TipToken verification fails if signature invalid OR expired OR requested > `maxTipCents`.
 
-These eight invariants live as unit tests. See `.claude/agents/tdd-guide.md` for the test patterns.
+These eight invariants live as unit tests. See `.cursor/agents/tdd-guide.md` for the test patterns.
