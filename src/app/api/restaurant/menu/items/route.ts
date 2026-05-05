@@ -59,6 +59,17 @@ export async function POST(request: Request) {
 
   const price = new Decimal(parsed.data.price)
 
+  // Verify categoryId belongs to this restaurant (cross-tenant FK guard)
+  if (parsed.data.categoryId) {
+    const category = await prisma.menuCategory.findFirst({
+      where: { id: parsed.data.categoryId, restaurantId: session.user.restaurantId },
+      select: { id: true },
+    })
+    if (!category) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
+  }
+
   const item = await prisma.menuItem.create({
     data: {
       restaurantId: session.user.restaurantId,

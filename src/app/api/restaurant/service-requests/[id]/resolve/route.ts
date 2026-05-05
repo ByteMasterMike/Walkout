@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { validateUuid } from '@/lib/validate'
 
 export async function POST(
   _request: Request,
@@ -12,6 +13,9 @@ export async function POST(
   }
 
   const { id } = await params
+
+  const invalidId = validateUuid(id, 'id')
+  if (invalidId) return invalidId
 
   const serviceRequest = await prisma.serviceRequest.findUnique({
     where: { id },

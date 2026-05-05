@@ -2,12 +2,16 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
 import { HeartbeatSchema } from '@/lib/schemas/session'
+import { validateUuid } from '@/lib/validate'
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   const { sessionId } = await params
+
+  const invalidSessionId = validateUuid(sessionId, 'sessionId')
+  if (invalidSessionId) return invalidSessionId
 
   const anonToken = request.headers.get('x-anon-token')
   const nextAuthSession = await auth()

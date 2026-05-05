@@ -40,6 +40,17 @@ export async function PATCH(
   const { price: priceStr, ...rest } = parsed.data
   const price = priceStr !== undefined ? new Decimal(priceStr) : undefined
 
+  // Verify categoryId belongs to this restaurant (cross-tenant FK guard)
+  if (parsed.data.categoryId !== undefined && parsed.data.categoryId !== null) {
+    const category = await prisma.menuCategory.findFirst({
+      where: { id: parsed.data.categoryId, restaurantId: session.user.restaurantId },
+      select: { id: true },
+    })
+    if (!category) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
+  }
+
   const item = await prisma.menuItem.update({
     where: { id },
     data: { ...rest, ...(price !== undefined ? { price } : {}) },

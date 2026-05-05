@@ -3,12 +3,16 @@ import { Decimal } from 'decimal.js'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
 import { OrderCreateSchema } from '@/lib/schemas/order'
+import { validateUuid } from '@/lib/validate'
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   const { sessionId } = await params
+
+  const invalidSessionId = validateUuid(sessionId, 'sessionId')
+  if (invalidSessionId) return invalidSessionId
 
   // Identify caller: anon token from middleware header, or authenticated diner/staff
   const anonToken = request.headers.get('x-anon-token')

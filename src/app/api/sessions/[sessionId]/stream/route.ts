@@ -1,12 +1,22 @@
 export const runtime = 'edge'
 
 import { createSupabaseClient } from '@/lib/supabase'
+import { z } from 'zod'
+
+const uuidSchema = z.string().uuid()
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   const { sessionId } = await params
+
+  if (!uuidSchema.safeParse(sessionId).success) {
+    return new Response(JSON.stringify({ error: 'Invalid sessionId' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
 
   // Verify participant membership via Supabase directly (no Prisma on Edge)
   const anonToken = request.headers.get('x-anon-token')

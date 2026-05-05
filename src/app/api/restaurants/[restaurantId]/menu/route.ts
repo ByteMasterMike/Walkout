@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { validateUuid } from '@/lib/validate'
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ restaurantId: string }> }
 ) {
   const { restaurantId } = await params
+
+  const invalidRestaurantId = validateUuid(restaurantId, 'restaurantId')
+  if (invalidRestaurantId) return invalidRestaurantId
   const { searchParams } = new URL(request.url)
   const search = searchParams.get('search')?.trim()
 
