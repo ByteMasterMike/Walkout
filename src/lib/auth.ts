@@ -15,11 +15,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const email = credentials.email as string;
+        const emailTrimmed = (credentials.email as string).trim();
         const password = credentials.password as string;
 
-        // Try Restaurant ADMIN first
-        const restaurant = await prisma.restaurant.findUnique({ where: { email } });
+        // Try Restaurant ADMIN first (case-insensitive — legacy rows may differ in casing)
+        const restaurant = await prisma.restaurant.findFirst({
+          where: { email: { equals: emailTrimmed, mode: 'insensitive' } },
+        });
         if (restaurant) {
           const valid = await bcrypt.compare(password, restaurant.passwordHash);
           if (!valid) return null;
@@ -33,7 +35,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         // Try RestaurantStaff (MANAGER / STAFF)
-        const staff = await prisma.restaurantStaff.findUnique({ where: { email } });
+        const staff = await prisma.restaurantStaff.findFirst({
+          where: { email: { equals: emailTrimmed, mode: 'insensitive' } },
+        });
         if (staff && staff.passwordHash && staff.isActive) {
           const valid = await bcrypt.compare(password, staff.passwordHash);
           if (!valid) return null;
