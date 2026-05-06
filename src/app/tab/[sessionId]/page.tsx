@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { Suspense, useEffect, useState, useRef } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import Decimal from 'decimal.js';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useIdleWarning } from '@/hooks/useIdleWarning';
@@ -120,7 +120,7 @@ const SERVICE_STATUS_LABELS: Record<string, string> = {
 // TODO: replace with fetch('/api/sessions/${sessionId}') once Michael ships
 //       src/lib/schemas/session.ts
 // ---------------------------------------------------------------------------
-function getMockSession(sessionId: string): SessionData {
+function getMockSession(sessionId: string, holdOverride?: string | null): SessionData {
   return {
     id: sessionId,
     tableNumber: '7',
@@ -129,7 +129,13 @@ function getMockSession(sessionId: string): SessionData {
     walkOutServiceFeePercent: '0.0050',
     participantId: 'mock-participant-1',
     displayName: 'Alex',
-    holdStatus: 'HELD',
+    holdStatus:
+      holdOverride &&
+      ['NONE', 'PENDING', 'HELD', 'FAILED', 'RELEASED', 'EXPIRED', 'REAUTHORIZING'].includes(
+        holdOverride
+      )
+        ? holdOverride
+        : 'HELD',
     orders: [],
     serviceRequests: [],
     categories: [
@@ -197,8 +203,11 @@ function getMockSession(sessionId: string): SessionData {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function TabPage() {
+function TabPageInner() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const searchParams = useSearchParams();
+  const mockHoldParam =
+    process.env.NODE_ENV === 'development' ? searchParams.get('mockHold') : null;
   const [session, setSession] = useState<SessionData | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -222,8 +231,8 @@ export default function TabPage() {
     if (!dismissed) setBannerDismissed(false);
 
     // TODO: replace with real API fetch once Michael ships src/lib/schemas/session.ts
-    setSession(getMockSession(sessionId));
-  }, [sessionId]);
+    setSession(getMockSession(sessionId, mockHoldParam));
+  }, [sessionId, mockHoldParam]);
 
   if (!session) {
     return (
@@ -384,8 +393,15 @@ export default function TabPage() {
               {popularItems.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { setSelectedItem(item); setKitchenNotes(''); }}
-                  className="shrink-0 w-36 bg-white border border-gray-200 rounded-xl p-3 text-left hover:border-gray-400 transition-colors"
+                  type="button"
+                  onClick={() => {
+                    if (!holdFailed) {
+                      setSelectedItem(item);
+                      setKitchenNotes('');
+                    }
+                  }}
+                  disabled={holdFailed}
+                  className={`shrink-0 w-36 bg-white border border-gray-200 rounded-xl p-3 text-left transition-colors ${holdFailed ? 'opacity-40 cursor-not-allowed' : 'hover:border-gray-400'}`}
                 >
                   {item.imageUrl ? (
                     <div className="w-full h-20 rounded-lg bg-gray-100 overflow-hidden mb-2">
@@ -665,5 +681,19 @@ export default function TabPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TabPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <p className="text-sm text-gray-400">Loading your tab...</p>
+        </div>
+      }
+    >
+      <TabPageInner />
+    </Suspense>
   );
 }
