@@ -3,6 +3,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Decimal from 'decimal.js';
+import { useHeartbeat } from '@/hooks/useHeartbeat';
+import { useIdleWarning } from '@/hooks/useIdleWarning';
+import IdleWarningToast from '@/components/IdleWarningToast';
 
 // ---------------------------------------------------------------------------
 // Types — mirrors API response shape (wire to /api/sessions/[sessionId] once
@@ -209,6 +212,11 @@ export default function TabPage() {
   const [requestToast, setRequestToast] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useHeartbeat(sessionId ?? null, session?.participantId ?? null);
+  const { isIdle, resetIdle } = useIdleWarning();
+
+  const holdFailed = session?.holdStatus === 'FAILED';
+
   useEffect(() => {
     const dismissed = localStorage.getItem('walkout_banner_dismissed');
     if (!dismissed) setBannerDismissed(false);
@@ -338,7 +346,22 @@ export default function TabPage() {
         </div>
       )}
 
-      {/* Hold status */}
+      {/* Hold-failed blocking banner — sticky so it stays visible while scrolling */}
+      {holdFailed && (
+        <div className="sticky top-14 z-10 mx-0 bg-red-600 text-white px-4 py-3 flex items-start gap-3">
+          <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <div>
+            <p className="text-sm font-semibold">Card declined — ordering is paused</p>
+            <p className="text-xs mt-0.5 text-red-100">
+              Please speak to your server to update your payment method before placing an order.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Hold active confirmation */}
       {session.holdStatus === 'HELD' && (
         <div className="mx-4 mt-4 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
           <svg className="w-4 h-4 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -346,14 +369,6 @@ export default function TabPage() {
           </svg>
           <p className="text-xs text-green-700">
             Your card is on hold. You&apos;ll only be charged for what you order.
-          </p>
-        </div>
-      )}
-      {session.holdStatus === 'FAILED' && (
-        <div className="mx-4 mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
-          <p className="text-xs text-red-700 font-medium">Card declined.</p>
-          <p className="text-xs text-red-600 mt-0.5">
-            Ordering is paused. Please speak to your server to update your payment method.
           </p>
         </div>
       )}
@@ -427,8 +442,9 @@ export default function TabPage() {
                 {cat.items.map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => { setSelectedItem(item); setKitchenNotes(''); }}
-                    className="bg-white border border-gray-200 rounded-xl p-3 text-left hover:border-gray-400 transition-colors"
+                    onClick={() => { if (!holdFailed) { setSelectedItem(item); setKitchenNotes(''); } }}
+                    disabled={holdFailed}
+                    className={`bg-white border border-gray-200 rounded-xl p-3 text-left transition-colors ${holdFailed ? 'opacity-40 cursor-not-allowed' : 'hover:border-gray-400'}`}
                   >
                     {item.imageUrl ? (
                       <div className="w-full h-24 rounded-lg bg-gray-100 overflow-hidden mb-2">
@@ -569,8 +585,11 @@ export default function TabPage() {
         </div>
       </div>
 
+      {/* Idle warning toast */}
+      {isIdle && <IdleWarningToast onDismiss={resetIdle} />}
+
       {/* Request sent toast */}
-      {requestToast && (
+      {requestToast && !isIdle && (
         <div className="fixed bottom-6 left-4 right-4 z-50 bg-gray-900 text-white text-xs rounded-xl px-4 py-3 text-center shadow-lg">
           {requestToast}
         </div>
