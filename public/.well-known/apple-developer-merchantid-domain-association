@@ -1,0 +1,12 @@
+PLACEHOLDER — replace this file with the real Apple Pay domain association file
+before going to production.
+
+Steps:
+1. Log in to https://developer.apple.com
+2. Go to Certificates, Identifiers & Profiles > Merchant IDs
+3. Select your merchant ID > Click "Download" next to Domain Verification
+4. Replace the contents of this file with the downloaded file (no extension, no changes)
+5. Verify at: https://walkoutofficial.com/.well-known/apple-developer-merchantid-domain-association
+
+The file must be served as plain text at this exact path with no auth required.
+Vercel serves files in public/ statically — no additional config needed.

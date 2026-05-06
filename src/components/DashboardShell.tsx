@@ -13,13 +13,15 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/dashboard/tables',   label: 'Live Tables',       roles: ['ADMIN', 'MANAGER', 'STAFF'] },
-  { href: '/dashboard/kitchen',  label: 'Kitchen Display',   roles: ['ADMIN', 'MANAGER', 'STAFF'] },
-  { href: '/dashboard/requests', label: 'Service Requests',  roles: ['ADMIN', 'MANAGER', 'STAFF'] },
-  { href: '/dashboard/floor',    label: 'Floor Setup',       roles: ['ADMIN', 'MANAGER'] },
-  { href: '/dashboard/menu',     label: 'Menu',              roles: ['ADMIN', 'MANAGER'] },
-  { href: '/dashboard/setup',    label: 'Table Setup',       roles: ['ADMIN'] },
-  { href: '/dashboard/setup/staff', label: 'Staff',          roles: ['ADMIN', 'MANAGER'] },
+  { href: '/dashboard/tables',        label: 'Live Tables',       roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+  { href: '/dashboard/kitchen',       label: 'Kitchen Display',   roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+  { href: '/dashboard/requests',      label: 'Service Requests',  roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+  { href: '/dashboard/floor',         label: 'Floor Setup',       roles: ['ADMIN', 'MANAGER'] },
+  { href: '/dashboard/menu',          label: 'Menu',              roles: ['ADMIN', 'MANAGER'] },
+  { href: '/dashboard/settlements',   label: 'Settlements',       roles: ['ADMIN', 'MANAGER'] },
+  { href: '/dashboard/setup',         label: 'Table Setup',       roles: ['ADMIN'] },
+  { href: '/dashboard/setup/staff',   label: 'Staff',             roles: ['ADMIN', 'MANAGER'] },
+  { href: '/dashboard/setup/stripe',  label: 'Stripe Setup',      roles: ['ADMIN'] },
 ];
 
 export default function DashboardShell({

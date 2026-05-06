@@ -12,6 +12,7 @@ import Decimal from 'decimal.js';
 
 type OrderItemStatus = 'PENDING' | 'CONFIRMED' | 'PREPPING' | 'SERVED' | 'CANCELLED';
 type HoldStatus = 'NONE' | 'PENDING' | 'HELD' | 'FAILED' | 'RELEASED' | 'EXPIRED' | 'REAUTHORIZING';
+type CaptureStatus = 'PENDING' | 'PROCESSING' | 'CAPTURED' | 'FAILED' | 'SKIPPED';
 type ServiceReqStatus = 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CANCELLED';
 
 type OrderItemRow = {
@@ -39,6 +40,7 @@ type ParticipantRow = {
   displayName: string;
   isHost: boolean;
   holdStatus: HoldStatus;
+  captureStatus: CaptureStatus | null;
   orders: OrderItemRow[];
   subtotalCents: number;
 };
@@ -116,7 +118,7 @@ function getMockDetail(tableId: string): TableDetailData {
     sessionId: 'mock-session-1',
     participants: [
       {
-        id: 'p1', displayName: 'Michael', isHost: true, holdStatus: 'HELD',
+        id: 'p1', displayName: 'Michael', isHost: true, holdStatus: 'HELD', captureStatus: null,
         subtotalCents: 4600,
         orders: [
           { id: 'o1', menuItemName: 'Ribeye Steak', quantity: 1, unitPrice: '44.00',
@@ -126,7 +128,7 @@ function getMockDetail(tableId: string): TableDetailData {
         ],
       },
       {
-        id: 'p2', displayName: 'Sarah', isHost: false, holdStatus: 'HELD',
+        id: 'p2', displayName: 'Sarah', isHost: false, holdStatus: 'FAILED', captureStatus: null,
         subtotalCents: 2500,
         orders: [
           { id: 'o3', menuItemName: 'Cheeseburger', quantity: 1, unitPrice: '14.00',
@@ -223,6 +225,10 @@ export default function TableDetailPage() {
     (r) => r.status === 'OPEN' || r.status === 'ACKNOWLEDGED'
   );
 
+  const failedHolds = detail.participants.filter((p) => p.holdStatus === 'FAILED');
+  const expiredHolds = detail.participants.filter((p) => p.holdStatus === 'EXPIRED');
+  const failedCaptures = detail.participants.filter((p) => p.captureStatus === 'FAILED');
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       {/* Header */}
@@ -243,6 +249,40 @@ export default function TableDetailPage() {
           </button>
         )}
       </div>
+
+      {/* Payment alert banners */}
+      {failedHolds.length > 0 && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="text-sm font-semibold text-red-900">
+            Card declined — {failedHolds.map((p) => p.displayName).join(', ')}
+          </p>
+          <p className="text-xs text-red-700 mt-0.5">
+            {failedHolds.length === 1 ? 'This guest' : 'These guests'} cannot place orders.
+            Ask {failedHolds.length === 1 ? 'them' : 'each'} to provide an alternative card.
+          </p>
+        </div>
+      )}
+      {expiredHolds.length > 0 && (
+        <div className="mb-4 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+          <p className="text-sm font-semibold text-orange-900">
+            Hold expired — {expiredHolds.map((p) => p.displayName).join(', ')}
+          </p>
+          <p className="text-xs text-orange-700 mt-0.5">
+            The auth hold needs re-authorization. The cron will retry automatically; manual
+            action may be required from the Settlements page.
+          </p>
+        </div>
+      )}
+      {failedCaptures.length > 0 && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="text-sm font-semibold text-red-900">
+            Capture failed — {failedCaptures.map((p) => p.displayName).join(', ')}
+          </p>
+          <p className="text-xs text-red-700 mt-0.5">
+            Payment could not be captured. Go to Settlements to retry or write off.
+          </p>
+        </div>
+      )}
 
       {/* Service requests */}
       {activeRequests.length > 0 && (
