@@ -27,6 +27,8 @@ enum TableStatus {
 
 enum SessionStatus {
   OPEN
+  AWAITING_TIP
+  CAPTURING
   CLOSING
   CLOSED
   ABANDONED
@@ -354,6 +356,7 @@ model TabSession {
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
 
   status            SessionStatus @default(OPEN)
+  departureSource   DepartureSource?
   hostParticipantId String?
 
   assignedStaffId String?

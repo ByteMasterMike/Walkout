@@ -5,7 +5,7 @@ export const SessionStateSchema = z.object({
     id: z.string().uuid(),
     tableId: z.string().uuid(),
     restaurantId: z.string().uuid(),
-    status: z.enum(['OPEN', 'CLOSING', 'CLOSED', 'ABANDONED']),
+    status: z.enum(['OPEN', 'AWAITING_TIP', 'CAPTURING', 'CLOSING', 'CLOSED', 'ABANDONED']),
     assignedStaffId: z.string().uuid().nullable(),
     lastHeartbeatAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),

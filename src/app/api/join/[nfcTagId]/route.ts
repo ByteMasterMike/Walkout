@@ -69,7 +69,7 @@ export async function POST(
   // Race-condition-safe session creation: try to find active session first,
   // then create one if none exists, catching P2002 from the partial unique index.
   let session = await prisma.tabSession.findFirst({
-    where: { tableId: table.id, status: { in: ['OPEN', 'CLOSING'] } },
+    where: { tableId: table.id, status: { in: ['OPEN', 'AWAITING_TIP', 'CAPTURING', 'CLOSING'] } },
     select: { id: true, hostParticipantId: true },
   });
 
@@ -90,7 +90,7 @@ export async function POST(
       if (isUniqueViolation) {
         // Re-fetch the session that won the race
         session = await prisma.tabSession.findFirst({
-          where: { tableId: table.id, status: { in: ['OPEN', 'CLOSING'] } },
+          where: { tableId: table.id, status: { in: ['OPEN', 'AWAITING_TIP', 'CAPTURING', 'CLOSING'] } },
           select: { id: true, hostParticipantId: true },
         });
       }

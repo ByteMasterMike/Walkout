@@ -1,13 +1,14 @@
 /**
  * capture.ts — WalkOut payment capture module
  *
- * Stubs only. Every function throws 'not implemented'.
- * Tests in __tests__/capture.test.ts must all be RED before implementation begins.
- *
+ * Pure math + orchestrator for Stripe capture / overflow PI creation.
  * Implementation guide: docs/prd/02-payments-and-money.md §11.4, §11.5, §17.8, §18
  */
 
+import type { TipSource } from '@prisma/client'
 import { Decimal } from 'decimal.js'
+import { prisma } from '@/lib/prisma'
+import { getStripe } from '@/lib/stripe'
 
 // ================================================================
 // TYPES — mirror Prisma schema enums and model shapes
@@ -321,15 +322,21 @@ export interface CaptureParticipantTabInput {
   stripeCustomerId: string
   stripePaymentMethodId: string
   stripeConnectAccountId: string
+  /** Resolved tip in cents (DB stores cents; computeCapture converts to dollars internally) */
+  resolvedTipAmountCents: number
+  resolvedTipSource: TipSource
 }
 
 /**
  * Execute the full capture flow for one participant:
- *   1. isCaptureAllowed pre-flight
- *   2. computeCapture math
- *   3. computeOverflowFees if needed
- *   4. Stripe PaymentIntent.capture (+ optional overflow PI)
- *   5. Persist subtotalCents, taxCents, serviceFeeCents, captureStatus
+ *   1. computeCapture math from persisted orders
+ *   2. computeOverflowFees if needed
+ *   3. Stripe PaymentIntent.capture (+ optional overflow PI)
+ *   4. Persist resolved tip + component cents; webhook confirms CAPTURED
+ *
+ * Preconditions:
+ *   - Caller MUST have won CAS: TabParticipant.captureStatus === 'PROCESSING'
+ *   - Session SHOULD be AWAITING_TIP or CAPTURING (we flip session → CAPTURING here)
  *
  * Called ONLY from:
  *   - Diner explicit tip choice API route
@@ -337,8 +344,153 @@ export interface CaptureParticipantTabInput {
  *
  * NEVER called from clearTable() or any staff seating action.
  */
-export async function captureParticipantTab(
-  _input: CaptureParticipantTabInput,
-): Promise<void> {
-  throw new Error('not implemented')
+export async function captureParticipantTab(input: CaptureParticipantTabInput): Promise<void> {
+  const participant = await prisma.tabParticipant.findUnique({
+    where: { id: input.participantId },
+    include: {
+      orders: true,
+      session: true,
+    },
+  })
+
+  if (!participant) {
+    throw new Error('Participant not found')
+  }
+
+  if (participant.captureStatus !== 'PROCESSING') {
+    throw new Error(`captureParticipantTab: expected captureStatus PROCESSING, got ${participant.captureStatus}`)
+  }
+
+  if (participant.holdStatus !== 'HELD') {
+    throw new Error('captureParticipantTab: hold must be HELD')
+  }
+
+  if (
+    !participant.stripePaymentIntentId ||
+    participant.holdAmount == null ||
+    !input.stripePaymentIntentId
+  ) {
+    throw new Error('captureParticipantTab: missing PaymentIntent / hold amount')
+  }
+
+  const sessionStatus = participant.session.status
+  if (sessionStatus !== 'AWAITING_TIP' && sessionStatus !== 'CAPTURING') {
+    throw new Error(`captureParticipantTab: invalid session status ${sessionStatus}`)
+  }
+
+  const restaurant = await prisma.restaurant.findUniqueOrThrow({
+    where: { id: participant.session.restaurantId },
+  })
+
+  const orders: OrderItemSnapshot[] = participant.orders.map((o) => ({
+    unitPrice: new Decimal(o.unitPrice.toString()),
+    quantity: o.quantity,
+    taxAmount: new Decimal(o.taxAmount.toString()),
+    status: o.status as OrderItemStatus,
+  }))
+
+  const tipDecimal = new Decimal(input.resolvedTipAmountCents).dividedBy(100)
+
+  const cap = computeCapture({
+    orders,
+    serviceFeePercent: new Decimal(restaurant.walkOutServiceFeePercent.toString()),
+    serviceFeeFlatCents: restaurant.walkOutServiceFeeFlat,
+    resolvedTipAmount: tipDecimal,
+  })
+
+  const feeSplit = computeOverflowFees({
+    applicationFeeCents: cap.applicationFeeCents,
+    holdAmount: input.holdAmount,
+    totalCents: cap.totalCents,
+  })
+
+  const stripe = getStripe()
+
+  const persistRow = await prisma.$transaction(async (tx) => {
+    await tx.tabSession.updateMany({
+      where: {
+        id: participant.sessionId,
+        status: { in: ['AWAITING_TIP', 'CAPTURING'] },
+      },
+      data: { status: 'CAPTURING' },
+    })
+
+    return tx.tabParticipant.update({
+      where: { id: input.participantId, captureStatus: 'PROCESSING' },
+      data: {
+        captureAttempt: { increment: 1 },
+        resolvedTipAmount: input.resolvedTipAmountCents,
+        resolvedTipSource: input.resolvedTipSource,
+        subtotalCents: cap.subtotalCents,
+        taxCents: cap.taxCents,
+        serviceFeeCents: cap.serviceFeeCents,
+      },
+      select: { captureAttempt: true, overflowAttempt: true },
+    })
+  })
+
+  const captureAttempt = persistRow.captureAttempt
+
+  try {
+    if (!feeSplit.isOverflow) {
+      await stripe.paymentIntents.capture(
+        participant.stripePaymentIntentId,
+        {
+          amount_to_capture: cap.totalCents,
+          application_fee_amount: feeSplit.holdFeeCents,
+        },
+        { idempotencyKey: `capture-${input.participantId}-${captureAttempt}` },
+      )
+      return
+    }
+
+    await stripe.paymentIntents.capture(
+      participant.stripePaymentIntentId,
+      {
+        amount_to_capture: input.holdAmount,
+        application_fee_amount: feeSplit.holdFeeCents,
+      },
+      { idempotencyKey: `capture-${input.participantId}-${captureAttempt}` },
+    )
+
+    const overflowAttemptRow = await prisma.tabParticipant.update({
+      where: { id: input.participantId },
+      data: { overflowAttempt: { increment: 1 } },
+      select: { overflowAttempt: true },
+    })
+
+    const overflowPi = await stripe.paymentIntents.create(
+      {
+        amount: feeSplit.overflowAmountCents,
+        currency: 'usd',
+        customer: input.stripeCustomerId,
+        payment_method: input.stripePaymentMethodId,
+        confirm: true,
+        off_session: true,
+        on_behalf_of: input.stripeConnectAccountId,
+        application_fee_amount: feeSplit.overflowFeeCents,
+        metadata: {
+          participantId: input.participantId,
+          sessionId: participant.sessionId,
+          type: 'overflow',
+        },
+      },
+      { idempotencyKey: `overflow-${input.participantId}-${overflowAttemptRow.overflowAttempt}` },
+    )
+
+    await prisma.tabParticipant.update({
+      where: { id: input.participantId },
+      data: {
+        overflowPaymentIntentId: overflowPi.id,
+        overflowAmount: feeSplit.overflowAmountCents,
+      },
+    })
+  } catch (err) {
+    console.error('[captureParticipantTab]', err)
+    await prisma.tabParticipant.updateMany({
+      where: { id: input.participantId, captureStatus: { not: 'CAPTURED' } },
+      data: { captureStatus: 'FAILED' },
+    })
+    throw err
+  }
 }

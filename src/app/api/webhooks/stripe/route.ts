@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const metaType = paymentIntent.metadata?.type;
 
-      if (metaType === 'auth_hold') {
+      if (metaType === 'auth_hold' || metaType === 'reauth') {
         await handleAuthHoldSucceeded(paymentIntent);
       } else if (metaType === 'capture') {
         await handleCaptureSucceeded(paymentIntent);
@@ -245,7 +245,7 @@ async function handleOverflowSucceeded(pi: Stripe.PaymentIntent) {
   // correctly for the Appendix E invariant to hold end-to-end.
   await prisma.tabParticipant.updateMany({
     where: {
-      stripePaymentIntentId: pi.id,
+      overflowPaymentIntentId: pi.id,
       overflowStatus: { not: 'CAPTURED' },
     },
     data: { overflowStatus: 'CAPTURED' },
