@@ -17,3 +17,11 @@
 ## Env file
 
 `.env.local` is gitignored. Copy [.env.example](../.env.example) to `.env.local` and set `STRIPE_WEBHOOK_SECRET`.
+
+## Tip links (`TIP_SECRET`)
+
+Signed tip URLs (`/tip/[token]` and `POST /api/sessions/[sessionId]/tip`) require `TIP_SECRET` (see `.env.example`). Generate with `openssl rand -base64 32`.
+
+## Apple Pay domain verification
+
+Replace the placeholder file at `public/.well-known/apple-developer-merchantid-domain-association` with the file Stripe provides during **Apple Pay domain verification** before going live with production keys.

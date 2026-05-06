@@ -4,6 +4,7 @@ import { DepartureSource } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { captureParticipantTab, resolveDefaultTip } from '@/lib/payment/capture'
 import { getStripe } from '@/lib/stripe'
+import { assignTipPromptTokensForSession } from '@/lib/tip/assignTipPromptTokens'
 
 // ================================================================
 // /api/cron/maintenance — single Vercel Cron job, every 5 minutes
@@ -46,6 +47,8 @@ async function processDepartures(): Promise<void> {
         data: { awaitingTipSince: now, departedAt: now },
       }),
     ])
+
+    await assignTipPromptTokensForSession(s.id)
   }
 
   // Pass 2 — 15-min tip timeout, session in tip state

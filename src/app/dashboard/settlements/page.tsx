@@ -2,41 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Decimal from 'decimal.js';
-
-// ---------------------------------------------------------------------------
-// Types — mirrors the settlements API response Michael will build.
-// TODO: import from src/lib/schemas/settlements.ts once Michael ships it
-// ---------------------------------------------------------------------------
-
-type SettlementAction =
-  | 'RETRY_HOLD'
-  | 'RETRY_CAPTURE'
-  | 'FORCE_20_CAPTURE'
-  | 'WRITE_OFF'
-  | 'REFUND'
-  | 'REQUEST_NEW_CARD';
-
-type SettlementIssue =
-  | 'HOLD_FAILED'
-  | 'HOLD_EXPIRED'
-  | 'CAPTURE_FAILED'
-  | 'CAPTURE_PARTIAL'
-  | 'REFUND_REQUESTED';
-
-type SettlementRow = {
-  id: string;
-  participantId: string;
-  sessionId: string;
-  tableNumber: string;
-  dinerName: string;
-  dinerEmail: string | null;
-  issue: SettlementIssue;
-  amountCents: number;
-  holdAttempt: number;
-  captureAttempt: number;
-  occurredAt: string;
-  availableActions: SettlementAction[];
-};
+import type { SettlementAction, SettlementIssue, SettlementRow } from '@/lib/schemas/settlements';
 
 const ISSUE_LABELS: Record<SettlementIssue, string> = {
   HOLD_FAILED:      'Hold declined',
@@ -81,53 +47,6 @@ function elapsedLabel(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// Mock data — TODO: replace with fetch('/api/restaurant/settlements') once
-// Michael ships the endpoint and src/lib/schemas/settlements.ts
-const MOCK_SETTLEMENTS: SettlementRow[] = [
-  {
-    id: 's1',
-    participantId: 'p-abc',
-    sessionId: 'sess-abc',
-    tableNumber: '4',
-    dinerName: 'Jordan Lee',
-    dinerEmail: 'jordan@example.com',
-    issue: 'CAPTURE_FAILED',
-    amountCents: 6325,
-    holdAttempt: 1,
-    captureAttempt: 2,
-    occurredAt: new Date(Date.now() - 18 * 60000).toISOString(),
-    availableActions: ['RETRY_CAPTURE', 'FORCE_20_CAPTURE', 'WRITE_OFF'],
-  },
-  {
-    id: 's2',
-    participantId: 'p-def',
-    sessionId: 'sess-def',
-    tableNumber: 'Bar 2',
-    dinerName: 'Sam Rivera',
-    dinerEmail: null,
-    issue: 'HOLD_FAILED',
-    amountCents: 0,
-    holdAttempt: 3,
-    captureAttempt: 0,
-    occurredAt: new Date(Date.now() - 47 * 60000).toISOString(),
-    availableActions: ['WRITE_OFF', 'REQUEST_NEW_CARD'],
-  },
-  {
-    id: 's3',
-    participantId: 'p-ghi',
-    sessionId: 'sess-ghi',
-    tableNumber: '11',
-    dinerName: 'Casey Park',
-    dinerEmail: 'casey@example.com',
-    issue: 'HOLD_EXPIRED',
-    amountCents: 4800,
-    holdAttempt: 2,
-    captureAttempt: 0,
-    occurredAt: new Date(Date.now() - 2 * 60 * 60000).toISOString(),
-    availableActions: ['RETRY_HOLD', 'WRITE_OFF'],
-  },
-];
-
 export default function SettlementsPage() {
   const [settlements, setSettlements] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,10 +54,22 @@ export default function SettlementsPage() {
   // actioning format: `${rowId}-${action}`
   const [confirmRow, setConfirmRow] = useState<{ id: string; action: SettlementAction } | null>(null);
 
+  async function loadSettlements() {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/restaurant/settlements', { credentials: 'include' });
+      if (!r.ok) throw new Error('Failed to load');
+      const data = (await r.json()) as { settlements: SettlementRow[] };
+      setSettlements(data.settlements ?? []);
+    } catch {
+      setSettlements([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    // TODO: replace with fetch('/api/restaurant/settlements') once Michael ships
-    setSettlements(MOCK_SETTLEMENTS);
-    setLoading(false);
+    void loadSettlements();
   }, []);
 
   async function handleAction(rowId: string, action: SettlementAction) {
@@ -153,10 +84,23 @@ export default function SettlementsPage() {
   async function executeAction(rowId: string, action: SettlementAction) {
     setConfirmRow(null);
     setActioning(`${rowId}-${action}`);
-    // TODO: POST /api/restaurant/settlements/[participantId]/action { action }
-    await new Promise((r) => setTimeout(r, 600));
-    setSettlements((prev) => prev.filter((s) => s.id !== rowId));
-    setActioning(null);
+    try {
+      const r = await fetch(`/api/restaurant/settlements/${rowId}/action`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        console.error('[settlements]', err);
+        alert('Action failed. Check the console for details.');
+        return;
+      }
+      await loadSettlements();
+    } finally {
+      setActioning(null);
+    }
   }
 
   if (loading) {

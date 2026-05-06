@@ -56,9 +56,11 @@ export async function proxy(request: NextRequest) {
       '/dashboard/floor',
       '/dashboard/setup/staff',
       '/dashboard/analytics/tips',
+      '/dashboard/settlements',
       '/api/restaurant/staff',
       '/api/restaurant/floor',
       '/api/restaurant/tip-pool',
+      '/api/restaurant/settlements',
     ];
     if (managerPlusPaths.some((p) => pathname.startsWith(p))) {
       if (role !== 'MANAGER' && role !== 'ADMIN') {
