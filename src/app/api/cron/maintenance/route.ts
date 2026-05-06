@@ -125,6 +125,11 @@ async function cleanupSessions(): Promise<void> {
   )
   if (hourET !== 3 || minuteET > 5) return
 
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.warn('[cron/cleanupSessions] STRIPE_SECRET_KEY missing — skipping reauth cleanup')
+    return
+  }
+
   const cutoff = new Date(now.getTime() - REAUTH_AGE_MS)
   const stripe = getStripe()
 
@@ -211,13 +216,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  try {
-    await processDepartures()
-    await cleanupSessions()
-    await generateWeeklyForecasts()
-    return NextResponse.json({ ok: true, ts: new Date().toISOString() })
-  } catch (err) {
-    console.error('[cron/maintenance]', err)
-    return NextResponse.json({ error: 'Cron failed' }, { status: 500 })
+  const ts = new Date().toISOString()
+  const phaseErrors: { phase: string; message: string }[] = []
+
+  for (const run of [
+    { name: 'processDepartures', fn: processDepartures },
+    { name: 'cleanupSessions', fn: cleanupSessions },
+    { name: 'generateWeeklyForecasts', fn: generateWeeklyForecasts },
+  ] as const) {
+    try {
+      await run.fn()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`[cron/maintenance] ${run.name}`, err)
+      phaseErrors.push({ phase: run.name, message })
+    }
   }
+
+  if (phaseErrors.length > 0) {
+    return NextResponse.json({ ok: false, ts, errors: phaseErrors }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true, ts })
 }

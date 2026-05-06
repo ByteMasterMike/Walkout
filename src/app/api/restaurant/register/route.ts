@@ -75,6 +75,19 @@ export async function POST(request: Request) {
           { status: 503 },
         );
       }
+      if (err.code === 'P2022' || err.code === 'P2021') {
+        return NextResponse.json(
+          { error: 'Database is temporarily unavailable. Please try again.' },
+          { status: 503 },
+        );
+      }
+    }
+
+    if (err instanceof Prisma.PrismaClientInitializationError) {
+      return NextResponse.json(
+        { error: 'Database is temporarily unavailable. Please try again.' },
+        { status: 503 },
+      );
     }
 
     return NextResponse.json({ error: 'Registration failed. Please try again.' }, { status: 500 });
