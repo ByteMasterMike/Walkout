@@ -549,6 +549,7 @@ model TipPoolEntry {
 
   createdAt DateTime @default(now())
 
+  @@unique([poolId, participantId])
   @@index([poolId])
   @@map("tip_pool_entries")
 }
