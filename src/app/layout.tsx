@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
-import { Plus_Jakarta_Sans, Inter, DM_Mono } from 'next/font/google';
+import { Fraunces, Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import Providers from '@/components/Providers';
 import PageTransition from '@/components/PageTransition';
 
-const jakartaSans = Plus_Jakarta_Sans({
+const fraunces = Fraunces({
   subsets: ['latin'],
   variable: '--font-display',
-  weight: ['400', '500', '600', '700', '800'],
+  weight: ['300', '400', '500', '600'],
+  style: ['normal', 'italic'],
   display: 'swap',
 });
 
@@ -19,7 +20,7 @@ const inter = Inter({
   display: 'swap',
 });
 
-const dmMono = DM_Mono({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
   weight: ['400', '500'],
@@ -27,8 +28,8 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'WalkOut',
-  description: 'Walk in. Eat. Walk out.',
+  title: 'Walkout — an operating system for restaurants',
+  description: 'No check. No wait. Just go.',
 };
 
 export const viewport = {
@@ -44,9 +45,8 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${jakartaSans.variable} ${inter.variable} ${dmMono.variable}`}
+      className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
-      {/* Prevent flash of wrong theme before React hydrates */}
       <head>
         <script
           dangerouslySetInnerHTML={{
