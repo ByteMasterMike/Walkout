@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '@/lib/prisma';
+import { stripe } from '@/lib/stripe';
 import { cookies } from 'next/headers';
 import { validateUuid } from '@/lib/validate';
 import { assignServerToSession } from '@/lib/session';
@@ -35,11 +36,31 @@ export async function POST(
 
   const { displayName, dietaryNotes } = parsed.data;
 
-  // Resolve table from NFC tag id
-  const table = await prisma.diningTable.findUnique({
+  // Resolve table and restaurant together — need Connect account ID for SetupIntent
+  const tableWithRestaurant = await prisma.diningTable.findUnique({
     where: { nfcTagId },
-    select: { id: true, restaurantId: true, isActive: true },
+    select: {
+      id: true,
+      restaurantId: true,
+      isActive: true,
+      restaurant: {
+        select: {
+          stripeConnectAccountId: true,
+          stripeConnectOnboarded: true,
+        },
+      },
+    },
   });
+
+  const table = tableWithRestaurant
+    ? {
+        id: tableWithRestaurant.id,
+        restaurantId: tableWithRestaurant.restaurantId,
+        isActive: tableWithRestaurant.isActive,
+        stripeConnectAccountId: tableWithRestaurant.restaurant.stripeConnectAccountId,
+        stripeConnectOnboarded: tableWithRestaurant.restaurant.stripeConnectOnboarded,
+      }
+    : null;
 
   if (!table || !table.isActive) {
     return NextResponse.json({ error: 'Table not found' }, { status: 404 });
@@ -115,6 +136,62 @@ export async function POST(
     // Missing assignment shows "Unassigned" warning in dashboard UI.
   }
 
+  // ── Stripe SetupIntent (§11.2) ──────────────────────────────────────────
+  // Create a Stripe Customer + SetupIntent so the diner can save a card
+  // for the off-session auth hold that fires immediately after setup.
+  // Only created when the restaurant has a connected Stripe account.
+  let setupClientSecret: string | null = null;
+
+  if (table.stripeConnectAccountId && table.stripeConnectOnboarded) {
+    try {
+      // Create a Stripe Customer to store the payment method off-session
+      const customer = await stripe.customers.create(
+        {
+          metadata: {
+            participantId: participant.id,
+            sessionId: session.id,
+            restaurantId: table.restaurantId,
+          },
+        },
+        // Scope the customer to the restaurant's connected account
+        { stripeAccount: table.stripeConnectAccountId }
+      );
+
+      // SetupIntent with 3DS forced during setup (§11.2):
+      // request_three_d_secure: 'any' gets the bank to grant off-session exemption
+      // so future automatic captures don't require user interaction.
+      const setupIntent = await stripe.setupIntents.create(
+        {
+          customer: customer.id,
+          usage: 'off_session',
+          payment_method_types: ['card'],
+          payment_method_options: {
+            card: { request_three_d_secure: 'any' },
+          },
+          metadata: {
+            sessionId: session.id,
+            participantId: participant.id,
+            restaurantId: table.restaurantId,
+          },
+        },
+        { stripeAccount: table.stripeConnectAccountId }
+      );
+
+      // Persist the Stripe Customer ID on the participant so the hold route
+      // can retrieve the saved payment method without another Stripe lookup
+      await prisma.tabParticipant.update({
+        where: { id: participant.id },
+        data: { stripeCustomerId: customer.id },
+      });
+
+      setupClientSecret = setupIntent.client_secret;
+    } catch (err) {
+      // SetupIntent failure should not block the join — log and continue.
+      // The UI will show the payment sheet with an error state.
+      console.error('[join] SetupIntent creation failed:', err);
+    }
+  }
+
   // Set httpOnly anon cookie (24h, secure, SameSite=lax)
   const cookieStore = await cookies();
   cookieStore.set('tabs_anon', anonToken, {
@@ -129,6 +206,9 @@ export async function POST(
     sessionId: session.id,
     participantId: participant.id,
     isHost,
-    nextStep: 'payment',
+    // setupClientSecret is null when restaurant has not yet connected Stripe.
+    // Client shows the payment sheet when non-null; skips it when null.
+    setupClientSecret,
+    nextStep: setupClientSecret ? 'payment' : 'tab',
   });
 }
