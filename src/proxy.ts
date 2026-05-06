@@ -28,6 +28,12 @@ export async function proxy(request: NextRequest) {
   }
 
   // ── Restaurant / Staff dashboard paths ───────────────────────────
+  // Owner self-service registration — must not require an existing session
+  // (otherwise fetch POST follows 307 → POST /auth/login → 405).
+  if (pathname === '/api/restaurant/register') {
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith('/dashboard') || pathname.startsWith('/api/restaurant')) {
     const session = await auth();
 
