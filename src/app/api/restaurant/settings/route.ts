@@ -11,7 +11,7 @@ const PatchSchema = z.object({
   tipDistributionMode: z.enum(['DIRECT', 'POOL']).optional(),
   absorbTipProcessingFee: z.boolean().optional(),
   tipPoolDisclaimerAccepted: z.boolean().optional(),
-  cloudPrintDeviceId: z.union([z.string().min(1).max(128), z.null()]).optional(),
+  cloudPrintDeviceId: z.union([z.string().trim().min(1).max(128), z.null()]).optional(),
   cloudPrintEnabled: z.boolean().optional(),
   cloudPrintAllowedIp: z
     .union([
@@ -20,6 +20,10 @@ const PatchSchema = z.object({
       z.null(),
     ])
     .optional(),
+  taxRate: z.coerce.number().min(0).max(0.5).optional(),
+  taxLabel: z.string().trim().min(1).max(80).optional(),
+  timezone: z.string().trim().min(1).max(80).optional(),
+  completeOnboarding: z.literal(true).optional(),
 });
 
 /**
@@ -51,11 +55,16 @@ export async function GET() {
 }
 
 /**
- * PATCH /api/restaurant/settings — ADMIN only.
+ * PATCH /api/restaurant/settings — ADMIN (full); MANAGER may patch tax/timezone/onboarding completion only.
  */
 export async function PATCH(request: Request) {
   const session = await auth();
-  if (!session?.user?.restaurantId || session.user.role !== 'ADMIN') {
+  if (!session?.user?.restaurantId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const role = session.user.role;
+  if (role !== 'ADMIN' && role !== 'MANAGER') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -69,6 +78,23 @@ export async function PATCH(request: Request) {
   const parsed = PatchSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+  }
+
+  const managerAllowedKeys = new Set([
+    'taxRate',
+    'taxLabel',
+    'timezone',
+    'completeOnboarding',
+  ]);
+
+  if (role === 'MANAGER') {
+    const touched = Object.entries(parsed.data)
+      .filter(([, v]) => v !== undefined)
+      .map(([k]) => k);
+    const forbidden = touched.some((k) => !managerAllowedKeys.has(k));
+    if (forbidden) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   const update: Prisma.RestaurantUpdateInput = {};
@@ -93,6 +119,18 @@ export async function PATCH(request: Request) {
   if (data.tipPoolDisclaimerAccepted === true) {
     update.tipPoolDisclaimerAt = new Date();
   }
+  if (data.taxRate !== undefined) {
+    update.taxRate = new Prisma.Decimal(data.taxRate);
+  }
+  if (data.taxLabel !== undefined) {
+    update.taxLabel = data.taxLabel;
+  }
+  if (data.timezone !== undefined) {
+    update.timezone = data.timezone;
+  }
+  if (data.completeOnboarding === true) {
+    update.onboardingCompletedAt = new Date();
+  }
 
   try {
     const restaurant = await prisma.restaurant.update({
@@ -105,6 +143,10 @@ export async function PATCH(request: Request) {
         cloudPrintDeviceId: true,
         cloudPrintEnabled: true,
         cloudPrintAllowedIp: true,
+        taxRate: true,
+        taxLabel: true,
+        timezone: true,
+        onboardingCompletedAt: true,
       },
     });
 

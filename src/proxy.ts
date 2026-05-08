@@ -1,9 +1,20 @@
 import { auth } from '@/lib/auth';
+import { enforceJoinLimit, enforceWriteLimit } from '@/lib/rate-limit';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ── Baseline write rate limits (PRD §25.8 join + Phase 6 session POSTs; Redis required in production) ──
+  if (request.method === 'POST' && pathname.startsWith('/api/join/')) {
+    const limited = await enforceJoinLimit(request);
+    if (limited) return limited;
+  }
+  if (request.method === 'POST' && pathname.startsWith('/api/sessions/')) {
+    const limited = await enforceWriteLimit(request);
+    if (limited) return limited;
+  }
 
   // ── Public paths — always allow through ──────────────────────────
   if (
@@ -51,7 +62,6 @@ export async function proxy(request: NextRequest) {
       '/dashboard/setup/printer',
       '/api/restaurant/stripe',
       '/api/restaurant/staff/invite',
-      '/api/restaurant/settings',
       '/api/restaurant/print-jobs',
     ];
     if (adminOnlyPaths.some((p) => pathname.startsWith(p))) {
@@ -63,6 +73,7 @@ export async function proxy(request: NextRequest) {
     // MANAGER+ routes — Staff list/page promoted to MANAGER+ per PRD §21.2
     const managerPlusPaths = [
       '/dashboard/floor',
+      '/dashboard/onboarding',
       '/dashboard/setup/staff',
       '/dashboard/analytics',
       '/dashboard/settlements',

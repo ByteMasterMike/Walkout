@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import { Fraunces, Inter, JetBrains_Mono } from 'next/font/google';
+import { Analytics } from '@vercel/analytics/react';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import Providers from '@/components/Providers';
 import PageTransition from '@/components/PageTransition';
+import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
 
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -30,11 +32,25 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Walkout — an operating system for restaurants',
   description: 'No check. No wait. Just go.',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'WalkOut',
+    statusBarStyle: 'default',
+  },
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/favicon.ico',
+  },
 };
 
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#fafafa' },
+    { media: '(prefers-color-scheme: dark)', color: '#171717' },
+  ],
 };
 
 export default function RootLayout({
@@ -56,9 +72,11 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
         <Providers>
+          <ServiceWorkerRegistrar />
           <Navbar />
           <PageTransition>{children}</PageTransition>
         </Providers>
+        {process.env.NODE_ENV === 'production' ? <Analytics /> : null}
       </body>
     </html>
   );

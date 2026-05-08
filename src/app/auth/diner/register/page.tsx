@@ -88,6 +88,15 @@ export default function DinerRegisterPage() {
             Sign in
           </Link>
         </p>
+        <p className="mt-6 text-center text-xs text-neutral-400">
+          <Link href="/terms" className="underline hover:text-neutral-600">
+            Terms
+          </Link>
+          {' · '}
+          <Link href="/privacy" className="underline hover:text-neutral-600">
+            Privacy
+          </Link>
+        </p>
       </div>
     </div>
   );

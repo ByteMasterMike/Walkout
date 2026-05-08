@@ -13,6 +13,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { href: '/dashboard/onboarding',    label: 'Onboarding',       roles: ['ADMIN', 'MANAGER'] },
   { href: '/dashboard/tables',        label: 'Live Tables',       roles: ['ADMIN', 'MANAGER', 'STAFF'] },
   { href: '/dashboard/kitchen',       label: 'Kitchen Display',   roles: ['ADMIN', 'MANAGER', 'STAFF'] },
   { href: '/dashboard/requests',      label: 'Service Requests',  roles: ['ADMIN', 'MANAGER', 'STAFF'] },

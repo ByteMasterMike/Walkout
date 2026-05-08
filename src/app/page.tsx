@@ -550,12 +550,20 @@ function Closing() {
 
 function Footer() {
   return (
-    <footer className="flex items-center justify-between border-t border-border px-6 py-8 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground md:px-10">
+    <footer className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-t border-border px-6 py-8 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground md:px-10">
       <div className="flex items-center gap-2">
         <ChevronLogo className="h-4 w-6" />
         <span>Walkout, 2026 — Warminster, PA</span>
       </div>
-      <div>No check · No wait · Just go</div>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <Link href="/terms" className="hover:text-foreground transition-colors">
+          Terms
+        </Link>
+        <Link href="/privacy" className="hover:text-foreground transition-colors">
+          Privacy
+        </Link>
+        <span className="hidden sm:inline">No check · No wait · Just go</span>
+      </div>
     </footer>
   );
 }

@@ -88,7 +88,7 @@ export default function TipDistributionSection() {
   }
 
   return (
-    <div className="mt-12 border-t border-gray-100 pt-10">
+    <div id="tip-distribution" className="mt-12 border-t border-gray-100 pt-10">
       <h2 className="text-lg font-bold text-gray-900 mb-1">Tip distribution</h2>
       <p className="text-sm text-gray-500 mb-6">
         How tips are attributed for reporting. Pool mode aggregates tips by shift; direct mode shows

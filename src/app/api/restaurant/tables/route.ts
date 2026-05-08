@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 const CreateTableSchema = z.object({
-  tableNumber: z.string().min(1).max(20),
+  tableNumber: z.string().trim().min(1).max(20),
 });
 
 export async function GET() {
