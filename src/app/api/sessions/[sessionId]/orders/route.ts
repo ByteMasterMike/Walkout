@@ -131,6 +131,11 @@ export async function POST(
     },
   })
 
+  await prisma.tabSession.update({
+    where: { id: sessionId },
+    data: { updatedAt: new Date() },
+  })
+
   return NextResponse.json(
     {
       order: {

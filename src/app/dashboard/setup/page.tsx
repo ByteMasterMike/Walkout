@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 
+import TipDistributionSection from './TipDistributionSection';
 type DiningTable = {
   id: string;
   tableNumber: string;
@@ -69,6 +71,15 @@ export default function SetupPage() {
         writer app.
       </p>
 
+      <div className="flex flex-wrap gap-2 mb-8">
+        <Link
+          href="/dashboard/setup/printer"
+          className="text-xs px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          Receipt printer (CloudPRNT)
+        </Link>
+      </div>
+
       {/* Create table */}
       <form onSubmit={handleCreate} className="flex gap-3 mb-8">
         <input
@@ -126,6 +137,8 @@ export default function SetupPage() {
           })}
         </div>
       )}
+
+      <TipDistributionSection />
     </div>
   );
 }

@@ -91,6 +91,7 @@ export async function POST(
     select: {
       id: true,
       status: true,
+      sessionId: true,
       session: { select: { restaurantId: true } },
     },
   })
@@ -150,6 +151,11 @@ export async function POST(
     where: { id },
     data: { status: newStatus },
     select: { id: true, status: true, updatedAt: true },
+  })
+
+  await prisma.tabSession.update({
+    where: { id: order.sessionId },
+    data: { updatedAt: new Date() },
   })
 
   return NextResponse.json({ order: updated })

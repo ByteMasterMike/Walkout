@@ -48,8 +48,11 @@ export async function proxy(request: NextRequest) {
     // ADMIN-only routes — invite and Stripe setup remain ADMIN-only
     const adminOnlyPaths = [
       '/dashboard/setup/stripe',
+      '/dashboard/setup/printer',
       '/api/restaurant/stripe',
       '/api/restaurant/staff/invite',
+      '/api/restaurant/settings',
+      '/api/restaurant/print-jobs',
     ];
     if (adminOnlyPaths.some((p) => pathname.startsWith(p))) {
       if (role !== 'ADMIN') {
@@ -61,7 +64,7 @@ export async function proxy(request: NextRequest) {
     const managerPlusPaths = [
       '/dashboard/floor',
       '/dashboard/setup/staff',
-      '/dashboard/analytics/tips',
+      '/dashboard/analytics',
       '/dashboard/settlements',
       '/api/restaurant/staff',
       '/api/restaurant/floor',

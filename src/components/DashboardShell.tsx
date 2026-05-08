@@ -19,9 +19,11 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/floor',         label: 'Floor Setup',       roles: ['ADMIN', 'MANAGER'] },
   { href: '/dashboard/menu',          label: 'Menu',              roles: ['ADMIN', 'MANAGER'] },
   { href: '/dashboard/settlements',   label: 'Settlements',       roles: ['ADMIN', 'MANAGER'] },
+  { href: '/dashboard/analytics/tips', label: 'Tip Analytics',    roles: ['ADMIN', 'MANAGER'] },
   { href: '/dashboard/setup',         label: 'Table Setup',       roles: ['ADMIN'] },
   { href: '/dashboard/setup/staff',   label: 'Staff',             roles: ['ADMIN', 'MANAGER'] },
   { href: '/dashboard/setup/stripe',  label: 'Stripe Setup',      roles: ['ADMIN'] },
+  { href: '/dashboard/setup/printer', label: 'Printer Setup',     roles: ['ADMIN'] },
 ];
 
 export default function DashboardShell({
