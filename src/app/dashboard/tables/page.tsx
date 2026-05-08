@@ -1,15 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useCallback, useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 
-// ---------------------------------------------------------------------------
-// Types — mirrors /api/restaurant/tables (live) response shape
-// TODO: import from src/lib/schemas/tables.ts once Michael ships it
-// ---------------------------------------------------------------------------
+import { useRestaurantStream } from '@/hooks/useRestaurantStream';
 
 type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'CLOSING';
-type HoldStatus = 'NONE' | 'PENDING' | 'HELD' | 'FAILED' | 'RELEASED' | 'EXPIRED' | 'REAUTHORIZING';
+type HoldStatus =
+  | 'NONE'
+  | 'PENDING'
+  | 'HELD'
+  | 'FAILED'
+  | 'RELEASED'
+  | 'EXPIRED'
+  | 'REAUTHORIZING';
 
 type LiveTable = {
   id: string;
@@ -41,78 +46,80 @@ function formatCents(cents: number): string {
 
 const STATUS_RING: Record<TableStatus, string> = {
   AVAILABLE: 'ring-green-400',
-  OCCUPIED:  'ring-amber-400',
-  CLOSING:   'ring-red-400',
+  OCCUPIED: 'ring-amber-400',
+  CLOSING: 'ring-red-400',
 };
 
 const STATUS_BG: Record<TableStatus, string> = {
   AVAILABLE: 'bg-green-50',
-  OCCUPIED:  'bg-amber-50',
-  CLOSING:   'bg-red-50',
+  OCCUPIED: 'bg-amber-50',
+  CLOSING: 'bg-red-50',
 };
 
 const STATUS_LABEL: Record<TableStatus, string> = {
   AVAILABLE: 'Available',
-  OCCUPIED:  'Occupied',
-  CLOSING:   'Closing',
+  OCCUPIED: 'Occupied',
+  CLOSING: 'Closing',
 };
 
-// Mock data — remove when wiring to /api/restaurant/tables (SSE)
-// TODO: replace with useRestaurantStream hook once Michael ships
-//       /api/restaurant/stream in src/app/api/restaurant/stream/route.ts
-const MOCK_TABLES: LiveTable[] = [
-  {
-    id: 'tbl-1', tableNumber: '1', status: 'AVAILABLE',
-    assignedServerName: 'Jordan', coverCount: 0, runningTotalCents: 0,
-    openedAt: null, hasOpenServiceRequest: false, hasFailedHold: false, hasCashParticipant: false, holdStatus: 'NONE',
-  },
-  {
-    id: 'tbl-2', tableNumber: '2', status: 'OCCUPIED',
-    assignedServerName: 'Alex', coverCount: 3, runningTotalCents: 6450,
-    openedAt: new Date(Date.now() - 28 * 60000).toISOString(),
-    hasOpenServiceRequest: true, hasFailedHold: false, hasCashParticipant: false, holdStatus: 'HELD',
-  },
-  {
-    id: 'tbl-3', tableNumber: '3', status: 'OCCUPIED',
-    assignedServerName: null, coverCount: 2, runningTotalCents: 3200,
-    openedAt: new Date(Date.now() - 14 * 60000).toISOString(),
-    hasOpenServiceRequest: false, hasFailedHold: true, hasCashParticipant: false, holdStatus: 'FAILED',
-  },
-  {
-    id: 'tbl-4', tableNumber: 'Bar 1', status: 'OCCUPIED',
-    assignedServerName: 'Sam', coverCount: 1, runningTotalCents: 1800,
-    openedAt: new Date(Date.now() - 55 * 60000).toISOString(),
-    hasOpenServiceRequest: false, hasFailedHold: false, hasCashParticipant: true, holdStatus: 'NONE',
-  },
-  {
-    id: 'tbl-5', tableNumber: '5', status: 'CLOSING',
-    assignedServerName: 'Jordan', coverCount: 4, runningTotalCents: 12300,
-    openedAt: new Date(Date.now() - 72 * 60000).toISOString(),
-    hasOpenServiceRequest: false, hasFailedHold: false, hasCashParticipant: false, holdStatus: 'HELD',
-  },
-  {
-    id: 'tbl-6', tableNumber: '6', status: 'AVAILABLE',
-    assignedServerName: 'Alex', coverCount: 0, runningTotalCents: 0,
-    openedAt: null, hasOpenServiceRequest: false, hasFailedHold: false, hasCashParticipant: false, holdStatus: 'NONE',
-  },
-];
+const CASH_BANNER_DISMISS_KEY = 'walkout:cash-banner-dismissed';
 
 export default function TablesPage() {
+  const { data: authSession } = useSession();
+  const restaurantId = authSession?.user?.restaurantId ?? '';
+
   const [tables, setTables] = useState<LiveTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setTick] = useState(0);
+  const [dismissedCashBanner, setDismissedCashBanner] = useState(false);
+
+  const loadTables = useCallback(async () => {
+    const res = await fetch('/api/restaurant/tables/live');
+    if (res.ok) {
+      const data = await res.json();
+      setTables(data.tables as LiveTable[]);
+    }
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    // TODO: replace with /api/restaurant/tables fetch + useRestaurantStream SSE hook
-    setTables(MOCK_TABLES);
-    setLoading(false);
+    loadTables();
+    try {
+      const raw = sessionStorage.getItem(CASH_BANNER_DISMISS_KEY);
+      if (raw === '1') setDismissedCashBanner(true);
+    } catch {
+      /* ignore */
+    }
+  }, [loadTables]);
 
-    // Refresh elapsed timers every 30 seconds
+  useRestaurantStream({
+    restaurantId,
+    enabled: !!restaurantId,
+    onEvent: (ev) => {
+      if (ev.type === 'session_update' || ev.type === 'table_update') {
+        loadTables();
+      }
+    },
+  });
+
+  useEffect(() => {
     const interval = setInterval(() => setTick((t) => t + 1), 30000);
     return () => clearInterval(interval);
   }, []);
 
   const occupied = tables.filter((t) => t.status !== 'AVAILABLE').length;
+
+  const cashAlertTables = tables.filter((t) => t.hasCashParticipant);
+  const showCashBanner = cashAlertTables.length > 0 && !dismissedCashBanner;
+
+  function dismissCashBanner() {
+    setDismissedCashBanner(true);
+    try {
+      sessionStorage.setItem(CASH_BANNER_DISMISS_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+  }
 
   return (
     <div className="px-4 py-8">
@@ -128,6 +135,24 @@ export default function TablesPage() {
           <span>Live</span>
         </div>
       </div>
+
+      {showCashBanner && (
+        <div className="max-w-4xl mx-auto mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex flex-wrap items-start justify-between gap-3">
+          <p className="text-sm text-amber-950">
+            <span className="font-semibold">Cash payment — collect cash on the floor.</span>{' '}
+            Tables:{' '}
+            {cashAlertTables.map((t) => t.tableNumber).join(', ')}. Open each table to mark cash
+            collected.
+          </p>
+          <button
+            type="button"
+            onClick={dismissCashBanner}
+            className="text-xs shrink-0 px-2 py-1 rounded-lg border border-amber-300 hover:bg-amber-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-sm text-gray-400 text-center py-16">Loading tables...</p>
@@ -160,7 +185,9 @@ function TableCard({ table }: { table: LiveTable }) {
             <span className="w-2 h-2 rounded-full bg-orange-500" title="Failed hold" />
           )}
           {table.hasCashParticipant && (
-            <span className="text-xs text-gray-500" title="Cash payment">$</span>
+            <span className="text-xs text-gray-500" title="Cash payment">
+              $
+            </span>
           )}
         </div>
       </div>
@@ -173,9 +200,7 @@ function TableCard({ table }: { table: LiveTable }) {
           <p className="text-xs text-gray-500 mt-1">
             {table.coverCount} {table.coverCount === 1 ? 'cover' : 'covers'} &middot; {elapsed}
           </p>
-          <p className="text-sm font-semibold text-gray-900 mt-1">
-            {formatCents(table.runningTotalCents)}
-          </p>
+          <p className="text-sm font-semibold text-gray-900 mt-1">{formatCents(table.runningTotalCents)}</p>
         </>
       )}
 

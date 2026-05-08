@@ -39,7 +39,9 @@ export default function TabPayPage() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [confirmStep, setConfirmStep] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [cashLoading, setCashLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [cashSuccess, setCashSuccess] = useState(false);
 
   useEffect(() => {
     try {
@@ -110,6 +112,27 @@ export default function TabPayPage() {
     ['PENDING', 'CONFIRMED', 'PREPPING'].includes(o.status),
   );
 
+  async function payWithCash() {
+    if (!participantId || !sessionId) return;
+    setCashLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/cash`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError((body as { error?: string }).error ?? 'Could not switch to cash.');
+        return;
+      }
+      setCashSuccess(true);
+    } finally {
+      setCashLoading(false);
+    }
+  }
+
   async function runCheckout() {
     if (!participantId || !sessionId) return;
     setCheckoutLoading(true);
@@ -145,6 +168,23 @@ export default function TabPayPage() {
         <Link href="/" className="text-sm font-medium text-gray-900 underline">
           Go home
         </Link>
+      </div>
+    );
+  }
+
+  if (cashSuccess && session) {
+    return (
+      <div className="min-h-screen bg-gray-50 px-4 py-10">
+        <div className="max-w-md mx-auto bg-white border border-gray-200 rounded-2xl p-6 text-center">
+          <h1 className="text-xl font-bold text-gray-900 mb-2">Cash payment</h1>
+          <p className="text-sm text-gray-600 mb-6">
+            Your server will collect payment at the table. A receipt may print at the expediter station —
+            no further action is needed in the app.
+          </p>
+          <Link href="/" className="block w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 text-center">
+            Done
+          </Link>
+        </div>
       </div>
     );
   }
@@ -245,13 +285,23 @@ export default function TabPayPage() {
         </div>
 
         {!confirmStep ? (
-          <button
-            type="button"
-            onClick={() => setConfirmStep(true)}
-            className="w-full py-3.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800"
-          >
-            Ready to leave
-          </button>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setConfirmStep(true)}
+              className="w-full py-3.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800"
+            >
+              Ready to leave
+            </button>
+            <button
+              type="button"
+              disabled={cashLoading}
+              onClick={() => void payWithCash()}
+              className="w-full py-3 rounded-xl border border-gray-300 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {cashLoading ? 'Switching…' : 'Pay with cash'}
+            </button>
+          </div>
         ) : (
           <div className="space-y-2">
             <p className="text-xs text-center text-gray-500">
