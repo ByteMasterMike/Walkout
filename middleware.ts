@@ -11,5 +11,8 @@ export const config = {
     '/api/sessions/:path*',
     '/join/:path*',
     '/api/join/:path*',
+    '/account/:path*',
+    '/api/diner/:path*',
+    '/tip/:path*',
   ],
 };

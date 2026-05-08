@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 let warnedNoRedis = false;
 let cashRatelimit: Ratelimit | null | undefined;
 let cloudprintRatelimit: Ratelimit | null | undefined;
+let signupMigrateRatelimit: Ratelimit | null | undefined;
 
 function getRedis(): Redis | null {
   const url = process.env.UPSTASH_REDIS_REST_URL;
@@ -34,6 +35,43 @@ function getCashLimiter(): Ratelimit | null {
     prefix: 'walkout:cash',
   });
   return cashRatelimit;
+}
+
+function getSignupMigrateLimiter(): Ratelimit | null {
+  if (signupMigrateRatelimit !== undefined) return signupMigrateRatelimit;
+  const redis = getRedis();
+  if (!redis) {
+    signupMigrateRatelimit = null;
+    return null;
+  }
+  signupMigrateRatelimit = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(5, '1 m'),
+    prefix: 'walkout:signup',
+  });
+  return signupMigrateRatelimit;
+}
+
+/** Client IP for abuse controls (best-effort behind proxies). */
+export function getRequestIp(request: Request): string {
+  const xff = request.headers.get('x-forwarded-for');
+  if (xff) {
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return request.headers.get('x-real-ip') ?? 'unknown';
+}
+
+/** Rate limit diner signup + migrate-from-guest per IP. Returns 429 response when limited. */
+export async function enforceSignupMigrateLimit(request: Request): Promise<NextResponse | null> {
+  const lim = getSignupMigrateLimiter();
+  if (!lim) return null;
+  const ip = getRequestIp(request);
+  const { success } = await lim.limit(ip);
+  if (!success) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+  return null;
 }
 
 function getCloudprintLimiter(): Ratelimit | null {

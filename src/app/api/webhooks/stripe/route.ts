@@ -1,8 +1,21 @@
+import { createElement } from 'react';
 import { NextResponse } from 'next/server';
+import { render } from '@react-email/render';
 import Stripe from 'stripe';
+import CaptureFailedEmail from '@/emails/CaptureFailedEmail';
+import { notifyCaptureSucceeded } from '@/lib/notify/captureReceipt';
+import { sendUrgentNotification } from '@/lib/notify/sendUrgent';
 import { prisma } from '@/lib/prisma';
 import { stripe } from '@/lib/stripe';
 import { allocateFee } from '@/lib/payment/capture';
+
+function appUrl(): string {
+  return process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
+}
+
+function formatMoneyFromCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
 
 /**
  * POST /api/webhooks/stripe
@@ -28,7 +41,7 @@ export async function POST(request: Request) {
   try {
     event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch {
-    return NextResponse.json({ error: 'Webhook signature verification failed' }, { status: 400 });
+    return NextResponse.json({ error: 'Webhook signature verification failed' }, { status: 401 });
   }
 
   // ── 2. Route on event type ────────────────────────────────────────────────
@@ -243,8 +256,9 @@ async function handleCaptureSucceeded(pi: Stripe.PaymentIntent) {
     await participantUpdate;
   }
 
-  // ── Step 6: Receipt ────────────────────────────────────────────────────────
-  // TODO(phase-5): send itemised receipt email via Resend and push notification
+  await notifyCaptureSucceeded(participant.id, pi.amount_received ?? pi.amount ?? 0);
+
+  // ── Step 6: Receipt (handled by notifyCaptureSucceeded) ───────────────────
 }
 
 // ============================================================================
@@ -305,6 +319,55 @@ async function handleOverflowSucceeded(pi: Stripe.PaymentIntent) {
 // ============================================================================
 
 async function handlePaymentFailed(pi: Stripe.PaymentIntent) {
+  const participants = await prisma.tabParticipant.findMany({
+    where: {
+      OR: [{ stripePaymentIntentId: pi.id }, { overflowPaymentIntentId: pi.id }],
+    },
+    include: {
+      diner: true,
+      session: {
+        include: {
+          restaurant: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  const seen = new Set<string>();
+  const amountCents = pi.amount ?? 0;
+
+  for (const p of participants) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+
+    const payUrl = `${appUrl()}/tab/${p.sessionId}/pay`;
+    const restaurantName = p.session.restaurant.name;
+
+    const emailHtml = await render(
+      createElement(CaptureFailedEmail, {
+        restaurantName,
+        amount: formatMoneyFromCents(amountCents),
+        payUrl,
+      }),
+    );
+
+    await sendUrgentNotification({
+      email: p.diner?.email,
+      phoneE164: p.diner?.phone ?? undefined,
+      pushSubscription: p.diner?.pushSubscription,
+      emailSubject: `Payment didn't go through — ${restaurantName}`,
+      emailHtml,
+      push: {
+        title: `${restaurantName}`,
+        body: `We couldn't charge ${formatMoneyFromCents(amountCents)}. Tap to pay.`,
+        url: payUrl,
+      },
+      smsBody: p.diner?.phone
+        ? `WalkOut: Your last meal payment didn't go through. Tap to retry: ${payUrl}`
+        : undefined,
+    });
+  }
+
   await prisma.tabParticipant.updateMany({
     where: {
       stripePaymentIntentId: pi.id,

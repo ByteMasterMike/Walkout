@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { Decimal } from 'decimal.js'
 import type { TipSource } from '@prisma/client'
 import { auth } from '@/lib/auth'
+import { getDinerIdFromSession } from '@/lib/diner-session'
 import { prisma } from '@/lib/prisma'
 import { validateUuid } from '@/lib/validate'
 import { TipSubmitSchema } from '@/lib/schemas/tip'
@@ -62,7 +63,7 @@ export async function POST(
   }
 
   if (tipCents > claims.maxTipCents) {
-    return NextResponse.json({ error: 'Tip exceeds maximum allowed' }, { status: 422 })
+    return NextResponse.json({ error: 'Tip exceeds allowed maximum' }, { status: 422 })
   }
 
   if (anonToken) {
@@ -71,18 +72,20 @@ export async function POST(
       select: { id: true },
     })
     if (!ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  } else if (nextAuthSession?.user?.email) {
+  } else {
+    const dinerId = getDinerIdFromSession(nextAuthSession)
+    if (!dinerId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     const ok = await prisma.tabParticipant.findFirst({
       where: {
         id: participantId,
         sessionId,
-        diner: { email: nextAuthSession.user.email },
+        dinerId,
       },
       select: { id: true },
     })
     if (!ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  } else {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const participant = await prisma.tabParticipant.findFirst({
@@ -110,6 +113,10 @@ export async function POST(
 
   if (participant.captureStatus !== 'PENDING') {
     return NextResponse.json({ ok: true, alreadyResolved: true })
+  }
+
+  if (!participant.tipPromptToken || participant.tipPromptToken !== tipToken) {
+    return NextResponse.json({ error: 'Stale tip link' }, { status: 401 })
   }
 
   if (participant.holdStatus !== 'HELD') {
@@ -172,7 +179,12 @@ export async function POST(
     })
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error('[tip]', err)
+    const message = err instanceof Error ? err.message : 'unknown'
+    console.error('[tip] capture failed', { participantId, message })
+    await prisma.tabParticipant.updateMany({
+      where: { id: participantId, captureStatus: 'PROCESSING' },
+      data: { captureStatus: 'PENDING' },
+    })
     return NextResponse.json({ error: 'Capture failed' }, { status: 500 })
   }
 }

@@ -6,17 +6,21 @@ declare module 'next-auth' {
       id: string;
       email: string;
       name: string;
-      restaurantId: string;
-      staffId: string | null;
-      role: 'ADMIN' | 'MANAGER' | 'STAFF';
+      /** Present for restaurant ADMIN / staff sessions */
+      restaurantId?: string | null;
+      staffId?: string | null;
+      /** Present when signed in via diner credentials */
+      dinerId?: string | null;
+      role: 'ADMIN' | 'MANAGER' | 'STAFF' | 'DINER';
     };
   }
 }
 
 declare module 'next-auth/jwt' {
   interface JWT {
-    restaurantId: string;
-    staffId: string | null;
-    role: 'ADMIN' | 'MANAGER' | 'STAFF';
+    restaurantId?: string | null;
+    staffId?: string | null;
+    dinerId?: string | null;
+    role: 'ADMIN' | 'MANAGER' | 'STAFF' | 'DINER';
   }
 }

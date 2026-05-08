@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server'
 import { Decimal } from 'decimal.js'
 import { DepartureSource } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { captureParticipantTab, resolveDefaultTip } from '@/lib/payment/capture'
+import { captureParticipantTab, getTimeoutTipResolution } from '@/lib/payment/capture'
 import { getStripe } from '@/lib/stripe'
 import { assignTipPromptTokensForSession } from '@/lib/tip/assignTipPromptTokens'
+import { notifyTipWindowOpened } from '@/lib/notify/tipWindow'
 
 // ================================================================
 // /api/cron/maintenance — single Vercel Cron job, every 5 minutes
@@ -49,6 +50,18 @@ async function processDepartures(): Promise<void> {
     ])
 
     await assignTipPromptTokensForSession(s.id)
+
+    const tipRecipients = await prisma.tabParticipant.findMany({
+      where: { sessionId: s.id, tipPromptToken: { not: null } },
+      select: { id: true },
+    })
+    for (const row of tipRecipients) {
+      try {
+        await notifyTipWindowOpened(row.id)
+      } catch (err) {
+        console.error('[cron/processDepartures] notifyTipWindowOpened', row.id, err)
+      }
+    }
   }
 
   // Pass 2 — 15-min tip timeout, session in tip state
@@ -62,6 +75,7 @@ async function processDepartures(): Promise<void> {
     include: {
       session: { include: { restaurant: true } },
       orders: true,
+      diner: { select: { defaultTipBehavior: true } },
     },
   })
 
@@ -92,8 +106,13 @@ async function processDepartures(): Promise<void> {
       new Decimal(0),
     )
 
-    const tipDecimal = resolveDefaultTip(subtotalDecimal, 'TIMEOUT_DEFAULT')
-    const tipCents = tipDecimal.times(100).toDecimalPlaces(0).toNumber()
+    const tipResolution = getTimeoutTipResolution(
+      subtotalDecimal,
+      p.tipBehavior,
+      p.diner?.defaultTipBehavior,
+    )
+    const tipCents = tipResolution.tipCents
+    const resolvedTipSource = tipResolution.resolvedTipSource
 
     try {
       await captureParticipantTab({
@@ -104,10 +123,15 @@ async function processDepartures(): Promise<void> {
         stripePaymentMethodId: p.stripePaymentMethodId,
         stripeConnectAccountId: restaurant.stripeConnectAccountId,
         resolvedTipAmountCents: tipCents,
-        resolvedTipSource: 'TIMEOUT_DEFAULT',
+        resolvedTipSource,
       })
     } catch (err) {
-      console.error('[cron/processDepartures] capture failed', p.id, err)
+      const message = err instanceof Error ? err.message : 'unknown'
+      console.error('[cron/processDepartures] capture failed', { participantId: p.id, message })
+      await prisma.tabParticipant.updateMany({
+        where: { id: p.id, captureStatus: 'PROCESSING' },
+        data: { captureStatus: 'PENDING' },
+      })
     }
   }
 }

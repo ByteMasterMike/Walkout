@@ -70,6 +70,7 @@ export async function proxy(request: NextRequest) {
       '/api/restaurant/floor',
       '/api/restaurant/tip-pool',
       '/api/restaurant/settlements',
+      '/api/restaurant/analytics',
     ];
     if (managerPlusPaths.some((p) => pathname.startsWith(p))) {
       if (role !== 'MANAGER' && role !== 'ADMIN') {
@@ -77,6 +78,33 @@ export async function proxy(request: NextRequest) {
       }
     }
 
+    return NextResponse.next();
+  }
+
+  // ── Guest migration (anon cookie only; no diner session yet) ────────
+  if (pathname === '/api/diner/migrate-from-guest') {
+    const anonToken = request.cookies.get('tabs_anon')?.value;
+    if (anonToken) {
+      const headers = new Headers(request.headers);
+      headers.set('x-anon-token', anonToken);
+      return NextResponse.next({ request: { headers } });
+    }
+    return NextResponse.next();
+  }
+
+  // ── Diner account UI + APIs (requires diner NextAuth session) ──────
+  if (pathname.startsWith('/account') || pathname.startsWith('/api/diner')) {
+    const session = await auth();
+    if (!session?.user?.dinerId || session.user.role !== 'DINER') {
+      const loginUrl = new URL('/auth/diner/login', request.url);
+      loginUrl.searchParams.set('callbackUrl', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    return NextResponse.next();
+  }
+
+  // ── Tip selector page (public; token + anon cookie guard API calls) ──
+  if (pathname.startsWith('/tip/')) {
     return NextResponse.next();
   }
 
