@@ -7,12 +7,26 @@ import { motion, useScroll, useMotionValueEvent } from 'framer-motion';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { LayoutDashboard, ScanLine, Spade, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
+
+function ChevronLogo({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 48 32" fill="none">
+      <defs>
+        <linearGradient id="chev-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#f0b36a" />
+          <stop offset="100%" stopColor="#b96e1e" />
+        </linearGradient>
+      </defs>
+      <path d="M4 5 L17 16 L4 27 L9 27 L22 16 L9 5 Z" fill="url(#chev-grad)" />
+      <path d="M18 5 L31 16 L18 27 L23 27 L36 16 L23 5 Z" fill="url(#chev-grad)" opacity="0.45" />
+    </svg>
+  );
+}
 
 const navLinks = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/tables/join', label: 'Join Table', icon: ScanLine },
 ];
 
 export default function Navbar() {
@@ -34,19 +48,14 @@ export default function Navbar() {
       style={{ borderBottomColor: 'hsl(var(--border))' }}
     >
       <div className="container flex h-16 items-center justify-between">
-        {/* Brand */}
         <Link href="/" className="flex items-center gap-2.5 no-underline hover:no-underline group">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary shadow-[0_0_16px_rgba(249,115,22,0.4)] group-hover:shadow-[0_0_24px_rgba(249,115,22,0.5)] transition-shadow">
-            <Spade className="h-4 w-4 text-white" />
-          </div>
-          <span className="font-display text-[1.15rem] font-extrabold tracking-tight text-foreground">
-            PokerPay
+          <ChevronLogo className="h-5 w-8" />
+          <span className="font-display text-[1.15rem] font-light italic tracking-tight text-foreground">
+            walkout
           </span>
         </Link>
 
-        {/* Nav links */}
         <div className="flex items-center gap-1">
-          {/* Dark mode toggle */}
           <Button
             variant="ghost"
             size="icon"

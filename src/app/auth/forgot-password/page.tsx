@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Spade, MailCheck } from 'lucide-react';
+import { MailCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,11 +44,18 @@ export default function ForgotPasswordPage() {
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12">
       <div className="w-full max-w-[420px] animate-fade-in">
         <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary shadow-[0_0_24px_rgba(249,115,22,0.4)]">
-            <Spade className="h-6 w-6 text-white" />
-          </div>
-          <p className="font-display text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-            PokerPay
+          <svg className="h-6 w-10" viewBox="0 0 48 32" fill="none">
+            <defs>
+              <linearGradient id="fp-chev" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#f0b36a" />
+                <stop offset="100%" stopColor="#b96e1e" />
+              </linearGradient>
+            </defs>
+            <path d="M4 5 L17 16 L4 27 L9 27 L22 16 L9 5 Z" fill="url(#fp-chev)" />
+            <path d="M18 5 L31 16 L18 27 L23 27 L36 16 L23 5 Z" fill="url(#fp-chev)" opacity="0.45" />
+          </svg>
+          <p className="font-display text-sm font-light italic tracking-tight text-muted-foreground">
+            walkout
           </p>
         </div>
 

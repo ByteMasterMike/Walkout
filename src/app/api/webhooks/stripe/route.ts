@@ -37,14 +37,28 @@ export async function POST(request: Request) {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const metaType = paymentIntent.metadata?.type;
 
+      if (metaType === 'overflow') {
+        await handleOverflowSucceeded(paymentIntent);
+        break;
+      }
+
+      // Same PaymentIntent id is used from auth hold through capture; metadata.type stays auth_hold/reauth.
+      const captureCandidate = await prisma.tabParticipant.findFirst({
+        where: { stripePaymentIntentId: paymentIntent.id },
+        select: { captureStatus: true },
+      });
+
+      if (
+        captureCandidate?.captureStatus === 'PROCESSING' &&
+        (paymentIntent.amount_received ?? 0) > 0
+      ) {
+        await handleCaptureSucceeded(paymentIntent);
+        break;
+      }
+
       if (metaType === 'auth_hold' || metaType === 'reauth') {
         await handleAuthHoldSucceeded(paymentIntent);
-      } else if (metaType === 'capture') {
-        await handleCaptureSucceeded(paymentIntent);
-      } else if (metaType === 'overflow') {
-        await handleOverflowSucceeded(paymentIntent);
       }
-      // Unknown metadata.type — return 200 silently; Stripe retries on non-200
       break;
     }
 
@@ -238,17 +252,51 @@ async function handleCaptureSucceeded(pi: Stripe.PaymentIntent) {
 // ============================================================================
 
 async function handleOverflowSucceeded(pi: Stripe.PaymentIntent) {
-  // TODO(phase-3): retrieve overflow PI balance_transaction.fee and add its
-  // tip pro-rata share to feeAllocatedToTipCents on the participant. Without
-  // this, DIRECT-mode tip reports overstate server net pay on overflow captures.
-  // The overflow PI's fee is small (typically < $0.05) but must be allocated
-  // correctly for the Appendix E invariant to hold end-to-end.
-  await prisma.tabParticipant.updateMany({
-    where: {
-      overflowPaymentIntentId: pi.id,
-      overflowStatus: { not: 'CAPTURED' },
+  const participant = await prisma.tabParticipant.findFirst({
+    where: { overflowPaymentIntentId: pi.id },
+    select: {
+      id: true,
+      overflowStatus: true,
+      resolvedTipAmount: true,
+      overflowAmount: true,
+      session: {
+        select: {
+          restaurant: { select: { stripeConnectAccountId: true } },
+        },
+      },
     },
-    data: { overflowStatus: 'CAPTURED' },
+  });
+
+  if (!participant || participant.overflowStatus === 'CAPTURED') return;
+
+  const stripeAccount = participant.session.restaurant.stripeConnectAccountId ?? undefined;
+  const chargeId =
+    typeof pi.latest_charge === 'string' ? pi.latest_charge : pi.latest_charge?.id;
+
+  let tipFeeIncrement = 0;
+  if (chargeId && stripeAccount) {
+    const charge = await stripe.charges.retrieve(
+      chargeId,
+      { expand: ['balance_transaction'] },
+      { stripeAccount },
+    );
+    const balanceTx = charge.balance_transaction as Stripe.BalanceTransaction | null;
+    const overflowFeeCents = balanceTx?.fee ?? 0;
+    const overflowAmt = participant.overflowAmount ?? pi.amount ?? 0;
+    const tipCents = participant.resolvedTipAmount ?? 0;
+    if (overflowAmt > 0 && overflowFeeCents > 0 && tipCents > 0) {
+      tipFeeIncrement = Math.round((tipCents / overflowAmt) * overflowFeeCents);
+    }
+  }
+
+  await prisma.tabParticipant.update({
+    where: { id: participant.id },
+    data: {
+      overflowStatus: 'CAPTURED',
+      ...(tipFeeIncrement > 0
+        ? { feeAllocatedToTipCents: { increment: tipFeeIncrement } }
+        : {}),
+    },
   });
 }
 
@@ -257,13 +305,19 @@ async function handleOverflowSucceeded(pi: Stripe.PaymentIntent) {
 // ============================================================================
 
 async function handlePaymentFailed(pi: Stripe.PaymentIntent) {
-  // Surface in /dashboard/settlements Pending Settlements panel (§21.8).
-  // updateMany is safe here — no-ops if already CAPTURED.
   await prisma.tabParticipant.updateMany({
     where: {
       stripePaymentIntentId: pi.id,
       captureStatus: { not: 'CAPTURED' },
     },
     data: { captureStatus: 'FAILED' },
+  });
+
+  await prisma.tabParticipant.updateMany({
+    where: {
+      overflowPaymentIntentId: pi.id,
+      overflowStatus: { not: 'CAPTURED' },
+    },
+    data: { overflowStatus: 'FAILED' },
   });
 }

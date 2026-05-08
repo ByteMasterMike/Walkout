@@ -4,6 +4,7 @@ import { DepartureSource } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { captureParticipantTab, resolveDefaultTip } from '@/lib/payment/capture'
 import { getStripe } from '@/lib/stripe'
+import { assignTipPromptTokensForSession } from '@/lib/tip/assignTipPromptTokens'
 
 // ================================================================
 // /api/cron/maintenance — single Vercel Cron job, every 5 minutes
@@ -46,6 +47,8 @@ async function processDepartures(): Promise<void> {
         data: { awaitingTipSince: now, departedAt: now },
       }),
     ])
+
+    await assignTipPromptTokensForSession(s.id)
   }
 
   // Pass 2 — 15-min tip timeout, session in tip state
@@ -121,6 +124,11 @@ async function cleanupSessions(): Promise<void> {
     now.toLocaleString('en-US', { minute: 'numeric', timeZone: 'America/New_York' }),
   )
   if (hourET !== 3 || minuteET > 5) return
+
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.warn('[cron/cleanupSessions] STRIPE_SECRET_KEY missing — skipping reauth cleanup')
+    return
+  }
 
   const cutoff = new Date(now.getTime() - REAUTH_AGE_MS)
   const stripe = getStripe()
@@ -208,13 +216,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  try {
-    await processDepartures()
-    await cleanupSessions()
-    await generateWeeklyForecasts()
-    return NextResponse.json({ ok: true, ts: new Date().toISOString() })
-  } catch (err) {
-    console.error('[cron/maintenance]', err)
-    return NextResponse.json({ error: 'Cron failed' }, { status: 500 })
+  const ts = new Date().toISOString()
+  const phaseErrors: { phase: string; message: string }[] = []
+
+  for (const run of [
+    { name: 'processDepartures', fn: processDepartures },
+    { name: 'cleanupSessions', fn: cleanupSessions },
+    { name: 'generateWeeklyForecasts', fn: generateWeeklyForecasts },
+  ] as const) {
+    try {
+      await run.fn()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`[cron/maintenance] ${run.name}`, err)
+      phaseErrors.push({ phase: run.name, message })
+    }
   }
+
+  if (phaseErrors.length > 0) {
+    return NextResponse.json({ ok: false, ts, errors: phaseErrors }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true, ts })
 }

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
 import { validateUuid } from '@/lib/validate'
+import { assignTipPromptTokensForSession } from '@/lib/tip/assignTipPromptTokens'
 
 const CheckoutSchema = z.object({
   participantId: z.string().uuid(),
@@ -106,6 +107,8 @@ export async function POST(
       data: { awaitingTipSince: now, departedAt: now },
     }),
   ])
+
+  await assignTipPromptTokensForSession(sessionId)
 
   return NextResponse.json({ ok: true })
 }
