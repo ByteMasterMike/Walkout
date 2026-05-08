@@ -92,15 +92,29 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // Identity guard: caller must be THIS participant
+  // Identity guard: caller must be THIS participant (anon cookie → header, or diner email)
   if (anonToken) {
     if (participant.anonToken !== anonToken) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
-  } else if (nextAuthSession?.user) {
-    // Diner account path — dinerId must match (checked via email lookup as proxy)
-    // Full diner auth is wired in Phase 5; for now permit any authenticated diner
-    // in the session since diner accounts are not yet fully built.
+  } else if (nextAuthSession?.user?.email) {
+    // Staff must never call this endpoint with arbitrary participantIds
+    if (nextAuthSession.user.restaurantId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    const linked = await prisma.tabParticipant.findFirst({
+      where: {
+        id: participantId,
+        sessionId,
+        diner: { email: nextAuthSession.user.email },
+      },
+      select: { id: true },
+    });
+    if (!linked) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+  } else {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   // Idempotency: already held — return success without calling Stripe again
@@ -123,6 +137,16 @@ export async function POST(
       { error: 'No payment customer found for this participant' },
       { status: 422 }
     );
+  }
+
+  const MIN_HOLD_CENTS = 500;
+  const MAX_HOLD_CENTS = 15_000;
+  if (
+    restaurant.defaultHoldAmount < MIN_HOLD_CENTS ||
+    restaurant.defaultHoldAmount > MAX_HOLD_CENTS
+  ) {
+    console.error('[hold] defaultHoldAmount out of bounds', restaurant.defaultHoldAmount);
+    return NextResponse.json({ error: 'Payment configuration error' }, { status: 422 });
   }
 
   // ── PRD §11.3: Pre-increment holdAttempt BEFORE Stripe call ──────────────
@@ -157,7 +181,10 @@ export async function POST(
         application_fee_amount: 0, // No fee on hold — fee fires at capture only (§11.3)
         metadata: { sessionId, participantId, type: 'auth_hold' },
       },
-      { idempotencyKey: `hold-${participantId}-${newHoldAttempt}` }
+      {
+        idempotencyKey: `hold-${participantId}-${newHoldAttempt}`,
+        stripeAccount: restaurant.stripeConnectAccountId,
+      }
     );
   } catch (err: unknown) {
     // Stripe card error (card_declined, insufficient_funds, etc.)

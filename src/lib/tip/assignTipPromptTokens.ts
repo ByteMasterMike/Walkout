@@ -4,10 +4,13 @@ import { computeCapture, type OrderItemStatus } from '@/lib/payment/capture'
 import { signTipToken } from '@/lib/tip/tipToken'
 
 /**
- * After session enters AWAITING_TIP, mint one signed tip link per pending-payment participant.
- * Safe to call multiple times (overwrites tipPromptToken).
+ * After session enters AWAITING_TIP — or when a single diner departs early — mint signed tip link(s).
+ * Pass `participantIds` to restrict minting (host-leaves-early: only the departing guest).
  */
-export async function assignTipPromptTokensForSession(sessionId: string): Promise<void> {
+export async function assignTipPromptTokensForSession(
+  sessionId: string,
+  options?: { participantIds?: string[] },
+): Promise<void> {
   try {
     if (!process.env.TIP_SECRET) {
       console.warn('[assignTipPromptTokensForSession] TIP_SECRET missing — skipping tip token mint')
@@ -15,7 +18,13 @@ export async function assignTipPromptTokensForSession(sessionId: string): Promis
     }
 
     const participants = await prisma.tabParticipant.findMany({
-      where: { sessionId, captureStatus: 'PENDING' },
+      where: {
+        sessionId,
+        captureStatus: 'PENDING',
+        ...(options?.participantIds?.length
+          ? { id: { in: options.participantIds } }
+          : {}),
+      },
       include: {
         orders: true,
         session: {

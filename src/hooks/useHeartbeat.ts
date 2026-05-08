@@ -8,6 +8,9 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
  * Sends a heartbeat ping every 30 seconds so the cron can detect idle sessions.
  * Also pings immediately when the page becomes visible again after being backgrounded
  * (covers mobile tab-switching — PRD §10.4).
+ *
+ * `tabs_anon` is httpOnly — middleware copies it to `x-anon-token` on `/api/sessions/*`;
+ * the browser sends the cookie on same-origin fetch without JS reading it.
  */
 export function useHeartbeat(sessionId: string | null, participantId: string | null) {
   const sessionIdRef = useRef(sessionId);
@@ -21,14 +24,6 @@ export function useHeartbeat(sessionId: string | null, participantId: string | n
   useEffect(() => {
     if (!sessionId || !participantId) return;
 
-    const anonToken =
-      typeof document !== 'undefined'
-        ? document.cookie
-            .split('; ')
-            .find((c) => c.startsWith('tabs_anon='))
-            ?.split('=')[1] ?? null
-        : null;
-
     async function ping() {
       const sid = sessionIdRef.current;
       const pid = participantIdRef.current;
@@ -39,7 +34,6 @@ export function useHeartbeat(sessionId: string | null, participantId: string | n
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(anonToken ? { 'x-anon-token': anonToken } : {}),
           },
           body: JSON.stringify({ participantId: pid }),
         });
@@ -48,12 +42,12 @@ export function useHeartbeat(sessionId: string | null, participantId: string | n
       }
     }
 
-    ping();
-    const interval = setInterval(ping, HEARTBEAT_INTERVAL_MS);
+    void ping();
+    const interval = setInterval(() => void ping(), HEARTBEAT_INTERVAL_MS);
 
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible') {
-        ping();
+        void ping();
       }
     }
 
