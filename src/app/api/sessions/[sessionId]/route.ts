@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
+import { validateUuid } from '@/lib/validate'
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   const { sessionId } = await params
+
+  const invalidSessionId = validateUuid(sessionId, 'sessionId')
+  if (invalidSessionId) return invalidSessionId
 
   const anonToken = request.headers.get('x-anon-token')
   const nextAuthSession = await auth()
@@ -17,7 +21,7 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const session = await prisma.tabSession.findUnique({
+  const sessionRow = await prisma.tabSession.findUnique({
     where: { id: sessionId },
     select: {
       id: true,
@@ -28,11 +32,40 @@ export async function GET(
       lastHeartbeatAt: true,
       createdAt: true,
       updatedAt: true,
+      restaurant: {
+        select: {
+          name: true,
+          taxRate: true,
+          taxEnabled: true,
+          walkOutServiceFeePercent: true,
+          walkOutServiceFeeFlat: true,
+        },
+      },
+      table: {
+        select: { tableNumber: true },
+      },
     },
   })
 
-  if (!session) {
+  if (!sessionRow) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+  }
+
+  const session = {
+    id: sessionRow.id,
+    tableId: sessionRow.tableId,
+    restaurantId: sessionRow.restaurantId,
+    status: sessionRow.status,
+    assignedStaffId: sessionRow.assignedStaffId,
+    lastHeartbeatAt: sessionRow.lastHeartbeatAt,
+    createdAt: sessionRow.createdAt,
+    updatedAt: sessionRow.updatedAt,
+    restaurantName: sessionRow.restaurant.name,
+    tableNumber: sessionRow.table.tableNumber,
+    taxRate: sessionRow.restaurant.taxRate.toString(),
+    taxEnabled: sessionRow.restaurant.taxEnabled,
+    walkOutServiceFeePercent: sessionRow.restaurant.walkOutServiceFeePercent.toString(),
+    walkOutServiceFeeFlat: sessionRow.restaurant.walkOutServiceFeeFlat,
   }
 
   // Verify staff belongs to the right restaurant
@@ -71,6 +104,8 @@ export async function GET(
         isHost: true,
         joinedAt: true,
         departedAt: true,
+        holdStatus: true,
+        captureStatus: true,
       },
       orderBy: { joinedAt: 'asc' },
     }),
@@ -105,9 +140,27 @@ export async function GET(
     }),
   ])
 
+  const participantsOut = participants.map((p) => {
+    const base = {
+      id: p.id,
+      displayName: p.displayName,
+      isHost: p.isHost,
+      joinedAt: p.joinedAt,
+      departedAt: p.departedAt,
+    }
+    const showPayment =
+      !isAnon ||
+      !anonParticipantId ||
+      p.id === anonParticipantId
+    return {
+      ...base,
+      ...(showPayment ? { holdStatus: p.holdStatus, captureStatus: p.captureStatus } : {}),
+    }
+  })
+
   return NextResponse.json({
     session,
-    participants,
+    participants: participantsOut,
     orders: orders.map((o) => ({
       id: o.id,
       participantId: o.participantId,

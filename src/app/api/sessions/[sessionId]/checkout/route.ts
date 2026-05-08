@@ -12,7 +12,10 @@ const CheckoutSchema = z.object({
 /**
  * POST /api/sessions/[sessionId]/checkout
  *
- * Diner-initiated departure: session OPEN → AWAITING_TIP, starts 15-min tip window (PRD §11.6).
+ * Diner-initiated departure:
+ * - Last guest / full table: session OPEN → AWAITING_TIP (PRD §11.6).
+ * - Host or guest leaves early while others remain: session stays OPEN; only this
+ *   participant enters tip window; host may be reassigned (PRD §5.3.1).
  */
 export async function POST(
   request: Request,
@@ -74,7 +77,7 @@ export async function POST(
 
   const session = await prisma.tabSession.findUnique({
     where: { id: sessionId },
-    select: { status: true },
+    select: { status: true, hostParticipantId: true },
   })
 
   if (!session) {
@@ -92,8 +95,71 @@ export async function POST(
     )
   }
 
+  const caller = await prisma.tabParticipant.findUnique({
+    where: { id: participantId },
+    select: { departedAt: true },
+  })
+  if (caller?.departedAt) {
+    return NextResponse.json({ ok: true, alreadyDeparted: true })
+  }
+
   const now = new Date()
 
+  const remainingActiveCount = await prisma.tabParticipant.count({
+    where: {
+      sessionId,
+      id: { not: participantId },
+      departedAt: null,
+      captureStatus: 'PENDING',
+      holdStatus: { in: ['HELD', 'PENDING'] },
+    },
+  })
+
+  // ── Early departure: others still at the table with an active hold ────────
+  if (remainingActiveCount > 0) {
+    await prisma.$transaction(async (tx) => {
+      await tx.tabParticipant.update({
+        where: { id: participantId },
+        data: { awaitingTipSince: now, departedAt: now },
+      })
+
+      if (session.hostParticipantId === participantId) {
+        const nextHost = await tx.tabParticipant.findFirst({
+          where: {
+            sessionId,
+            id: { not: participantId },
+            departedAt: null,
+            captureStatus: 'PENDING',
+            holdStatus: { in: ['HELD', 'PENDING'] },
+          },
+          orderBy: { joinedAt: 'asc' },
+        })
+
+        if (nextHost) {
+          await tx.tabSession.update({
+            where: { id: sessionId },
+            data: { hostParticipantId: nextHost.id },
+          })
+          console.info('[checkout] new host assigned', {
+            sessionId,
+            newHostParticipantId: nextHost.id,
+          })
+          // TODO(phase-5): push notification "You're now the host of Table X's tab."
+        } else {
+          await tx.tabSession.update({
+            where: { id: sessionId },
+            data: { status: 'CLOSING' },
+          })
+        }
+      }
+    })
+
+    await assignTipPromptTokensForSession(sessionId, { participantIds: [participantId] })
+
+    return NextResponse.json({ ok: true, sessionKept: true })
+  }
+
+  // ── Full table / last guest: existing behavior ───────────────────────────
   await prisma.$transaction([
     prisma.tabSession.update({
       where: { id: sessionId },

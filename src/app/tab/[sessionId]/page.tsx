@@ -1,18 +1,13 @@
 'use client';
 
-import { Suspense, useEffect, useState, useRef } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Decimal from 'decimal.js';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useIdleWarning } from '@/hooks/useIdleWarning';
 import IdleWarningToast from '@/components/IdleWarningToast';
-
-// ---------------------------------------------------------------------------
-// Types — mirrors API response shape (wire to /api/sessions/[sessionId] once
-// Michael ships the Zod schema in src/lib/schemas/session.ts)
-// ---------------------------------------------------------------------------
-
-type Allergen = string;
+import { useSessionStream } from '@/hooks/useSessionStream';
 
 type MenuItemData = {
   id: string;
@@ -20,7 +15,7 @@ type MenuItemData = {
   description: string | null;
   price: string;
   imageUrl: string | null;
-  allergens: Allergen[];
+  allergens: string[];
   isPopular: boolean;
   isAvailable: boolean;
   categoryId: string | null;
@@ -39,27 +34,19 @@ type OrderItemData = {
   taxAmount: string;
   quantity: number;
   notes: string | null;
-  status: 'PENDING' | 'CONFIRMED' | 'PREPPING' | 'SERVED' | 'CANCELLED';
+  status:
+    | 'PENDING'
+    | 'CONFIRMED'
+    | 'PREPPING'
+    | 'SERVED'
+    | 'CANCELLED'
+    | 'CASH_PENDING';
 };
 
 type ServiceRequestData = {
   id: string;
   type: ServiceRequestType;
   status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CANCELLED';
-};
-
-type SessionData = {
-  id: string;
-  tableNumber: string;
-  restaurantName: string;
-  taxRate: string;
-  walkOutServiceFeePercent: string;
-  participantId: string;
-  displayName: string;
-  holdStatus: string;
-  orders: OrderItemData[];
-  serviceRequests: ServiceRequestData[];
-  categories: MenuCategoryData[];
 };
 
 type ServiceRequestType =
@@ -73,6 +60,27 @@ type ServiceRequestType =
   | 'SPEAK_TO_SERVER'
   | 'CLOSE_TAB';
 
+type ApiSession = {
+  id: string;
+  status: string;
+  restaurantName: string;
+  tableNumber: string;
+  taxRate: string;
+  taxEnabled: boolean;
+  walkOutServiceFeePercent: string;
+  walkOutServiceFeeFlat: number;
+};
+
+type ApiParticipant = {
+  id: string;
+  displayName: string;
+  isHost: boolean;
+  joinedAt: string;
+  departedAt: string | null;
+  holdStatus: string;
+  captureStatus: string;
+};
+
 const SERVICE_REQUEST_LABELS: Record<ServiceRequestType, string> = {
   WATER: 'Water',
   REFILL: 'Refill drink',
@@ -85,12 +93,7 @@ const SERVICE_REQUEST_LABELS: Record<ServiceRequestType, string> = {
   CLOSE_TAB: 'Close tab',
 };
 
-const QUICK_REQUESTS: ServiceRequestType[] = [
-  'WATER',
-  'SILVERWARE',
-  'TOGO_CONTAINER',
-  'REFILL',
-];
+const QUICK_REQUESTS: ServiceRequestType[] = ['WATER', 'SILVERWARE', 'TOGO_CONTAINER', 'REFILL'];
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pending',
@@ -98,6 +101,7 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
   PREPPING: 'Preparing',
   SERVED: 'Served',
   CANCELLED: 'Cancelled',
+  CASH_PENDING: 'Cash pending',
 };
 
 const ORDER_STATUS_STYLES: Record<string, string> = {
@@ -106,6 +110,7 @@ const ORDER_STATUS_STYLES: Record<string, string> = {
   PREPPING: 'bg-orange-50 text-orange-700 border-orange-200',
   SERVED: 'bg-green-50 text-green-700 border-green-200',
   CANCELLED: 'bg-gray-100 text-gray-400 border-gray-200',
+  CASH_PENDING: 'bg-gray-100 text-gray-600 border-gray-200',
 };
 
 const SERVICE_STATUS_LABELS: Record<string, string> = {
@@ -115,100 +120,23 @@ const SERVICE_STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Cancelled',
 };
 
-// ---------------------------------------------------------------------------
-// Mock data — remove when wiring to real API
-// TODO: replace with fetch('/api/sessions/${sessionId}') once Michael ships
-//       src/lib/schemas/session.ts
-// ---------------------------------------------------------------------------
-function getMockSession(sessionId: string, holdOverride?: string | null): SessionData {
-  return {
-    id: sessionId,
-    tableNumber: '7',
-    restaurantName: 'Brew & Blade',
-    taxRate: '0.0600',
-    walkOutServiceFeePercent: '0.0050',
-    participantId: 'mock-participant-1',
-    displayName: 'Alex',
-    holdStatus:
-      holdOverride &&
-      ['NONE', 'PENDING', 'HELD', 'FAILED', 'RELEASED', 'EXPIRED', 'REAUTHORIZING'].includes(
-        holdOverride
-      )
-        ? holdOverride
-        : 'HELD',
-    orders: [],
-    serviceRequests: [],
-    categories: [
-      {
-        id: 'cat-1',
-        name: 'Starters',
-        items: [
-          {
-            id: 'item-1',
-            name: 'Lobster Bisque',
-            description: 'Rich, creamy bisque with sherry and fresh chives.',
-            price: '12.00',
-            imageUrl: null,
-            allergens: ['shellfish', 'dairy', 'gluten'],
-            isPopular: true,
-            isAvailable: true,
-            categoryId: 'cat-1',
-          },
-          {
-            id: 'item-2',
-            name: 'Caesar Salad',
-            description: 'Romaine, house-made caesar dressing, shaved parmesan, croutons.',
-            price: '11.00',
-            imageUrl: null,
-            allergens: ['dairy', 'gluten', 'egg'],
-            isPopular: false,
-            isAvailable: true,
-            categoryId: 'cat-1',
-          },
-        ],
-      },
-      {
-        id: 'cat-2',
-        name: 'Mains',
-        items: [
-          {
-            id: 'item-3',
-            name: 'Cheeseburger',
-            description: 'House-ground chuck, aged cheddar, pickles, brioche bun. Served with fries.',
-            price: '14.00',
-            imageUrl: null,
-            allergens: ['dairy', 'gluten'],
-            isPopular: true,
-            isAvailable: true,
-            categoryId: 'cat-2',
-          },
-          {
-            id: 'item-4',
-            name: 'Ribeye Steak',
-            description: '12 oz prime ribeye, truffle butter, roasted garlic mashed potatoes.',
-            price: '44.00',
-            imageUrl: null,
-            allergens: ['dairy'],
-            isPopular: true,
-            isAvailable: true,
-            categoryId: 'cat-2',
-          },
-        ],
-      },
-    ],
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 function TabPageInner() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const mockHoldParam =
     process.env.NODE_ENV === 'development' ? searchParams.get('mockHold') : null;
-  const [session, setSession] = useState<SessionData | null>(null);
+
+  const [participantId, setParticipantId] = useState<string | null>(null);
+  const [bootError, setBootError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const [sessionRow, setSessionRow] = useState<ApiSession | null>(null);
+  const [participants, setParticipants] = useState<ApiParticipant[]>([]);
+  const [orders, setOrders] = useState<OrderItemData[]>([]);
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequestData[]>([]);
+  const [categories, setCategories] = useState<MenuCategoryData[]>([]);
+
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -221,31 +149,140 @@ function TabPageInner() {
   const [requestToast, setRequestToast] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useHeartbeat(sessionId ?? null, session?.participantId ?? null);
-  const { isIdle, resetIdle } = useIdleWarning();
+  const loadSession = useCallback(async () => {
+    if (!sessionId) return;
+    const [sRes, mRes] = await Promise.all([
+      fetch(`/api/sessions/${sessionId}`),
+      fetch(`/api/sessions/${sessionId}/menu`),
+    ]);
 
-  const holdFailed = session?.holdStatus === 'FAILED';
+    if (!sRes.ok) {
+      setBootError('Could not load your tab. Try scanning the QR code again.');
+      return;
+    }
+
+    const sJson = (await sRes.json()) as {
+      session: ApiSession;
+      participants: ApiParticipant[];
+      orders: Array<{
+        id: string;
+        menuItemName: string;
+        unitPrice: string;
+        taxAmount: string;
+        quantity: number;
+        notes: string | null;
+        status: OrderItemData['status'];
+      }>;
+      serviceRequests: Array<{
+        id: string;
+        type: ServiceRequestType;
+        status: ServiceRequestData['status'];
+      }>;
+    };
+
+    setSessionRow(sJson.session);
+    setParticipants(sJson.participants);
+    setOrders(
+      sJson.orders.map((o) => ({
+        id: o.id,
+        menuItemName: o.menuItemName,
+        unitPrice: o.unitPrice,
+        taxAmount: o.taxAmount,
+        quantity: o.quantity,
+        notes: o.notes,
+        status: o.status,
+      })),
+    );
+    setServiceRequests(
+      sJson.serviceRequests.map((sr) => ({
+        id: sr.id,
+        type: sr.type,
+        status: sr.status,
+      })),
+    );
+
+    if (mRes.ok) {
+      const mJson = (await mRes.json()) as { categories: MenuCategoryData[] };
+      setCategories(mJson.categories ?? []);
+    }
+  }, [sessionId]);
 
   useEffect(() => {
-    const dismissed = localStorage.getItem('walkout_banner_dismissed');
-    if (!dismissed) setBannerDismissed(false);
+    try {
+      const dismissed = localStorage.getItem('walkout_banner_dismissed');
+      if (!dismissed) setBannerDismissed(false);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
-    // TODO: replace with real API fetch once Michael ships src/lib/schemas/session.ts
-    setSession(getMockSession(sessionId, mockHoldParam));
-  }, [sessionId, mockHoldParam]);
+  useEffect(() => {
+    let cancelled = false;
 
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-sm text-gray-400">Loading your tab...</p>
-      </div>
-    );
+    async function boot() {
+      setLoading(true);
+      setBootError(null);
+      try {
+        const pid = sessionStorage.getItem(`walkout_participant_${sessionId}`);
+        if (!pid) {
+          setBootError('Open your tab by scanning the table QR code first.');
+          return;
+        }
+        setParticipantId(pid);
+        await loadSession();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void boot();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, loadSession]);
+
+  useHeartbeat(sessionId ?? null, participantId ?? null);
+  const { isIdle, resetIdle } = useIdleWarning();
+
+  const reloadRef = useRef(loadSession);
+  reloadRef.current = loadSession;
+
+  useSessionStream({
+    sessionId: sessionId ?? '',
+    enabled: Boolean(sessionId && participantId),
+    onEvent: () => {
+      void reloadRef.current();
+    },
+    onReconnect: () => {
+      void reloadRef.current();
+    },
+  });
+
+  useEffect(() => {
+    const st = sessionRow?.status;
+    if (!st || !sessionId) return;
+    if (st === 'AWAITING_TIP' || st === 'CAPTURING' || st === 'CLOSING') {
+      router.replace(`/tab/${sessionId}/pay`);
+    }
+  }, [sessionRow?.status, sessionId, router]);
+
+  const me = useMemo(
+    () => participants.find((p) => p.id === participantId),
+    [participants, participantId],
+  );
+
+  let holdStatus = me?.holdStatus ?? 'NONE';
+  if (
+    process.env.NODE_ENV === 'development' &&
+    mockHoldParam &&
+    ['NONE', 'PENDING', 'HELD', 'FAILED', 'RELEASED', 'EXPIRED', 'REAUTHORIZING'].includes(mockHoldParam)
+  ) {
+    holdStatus = mockHoldParam;
   }
 
-  const allItems = session.categories.flatMap((c) => c.items);
-  const popularItems = allItems.filter((i) => i.isPopular && i.isAvailable);
+  const holdFailed = holdStatus === 'FAILED';
 
-  const filteredCategories = session.categories.map((cat) => ({
+  const filteredCategories = categories.map((cat) => ({
     ...cat,
     items: cat.items.filter((item) => {
       if (!item.isAvailable) return false;
@@ -261,20 +298,28 @@ function TabPageInner() {
     }),
   })).filter((cat) => cat.items.length > 0);
 
-  const activeOrders = session.orders.filter((o) => o.status !== 'CANCELLED');
+  const allItems = categories.flatMap((c) => c.items);
+  const popularItems = allItems.filter((i) => i.isPopular && i.isAvailable);
+
+  const activeOrders = orders.filter((o) => o.status !== 'CANCELLED');
   const subtotal = activeOrders.reduce(
     (sum, o) => sum.plus(new Decimal(o.unitPrice).times(o.quantity)),
-    new Decimal(0)
+    new Decimal(0),
   );
-  const tax = activeOrders.reduce(
-    (sum, o) => sum.plus(new Decimal(o.taxAmount).times(o.quantity)),
-    new Decimal(0)
-  );
-  const serviceFee = subtotal.times(new Decimal(session.walkOutServiceFeePercent));
+  const tax = activeOrders.reduce((sum, o) => sum.plus(new Decimal(o.taxAmount)), new Decimal(0));
+  const feePct = sessionRow ? new Decimal(sessionRow.walkOutServiceFeePercent) : new Decimal(0);
+  const flatCents = sessionRow?.walkOutServiceFeeFlat ?? 0;
+  const serviceFee = sessionRow
+    ? subtotal.times(feePct).plus(new Decimal(flatCents).dividedBy(100)).toDecimalPlaces(2)
+    : new Decimal(0);
   const total = subtotal.plus(tax).plus(serviceFee);
 
-  const activeRequests = session.serviceRequests.filter(
-    (r) => r.status === 'OPEN' || r.status === 'ACKNOWLEDGED'
+  const feePercentLabel = sessionRow
+    ? new Decimal(sessionRow.walkOutServiceFeePercent).times(100).toFixed(2)
+    : '0.50';
+
+  const activeRequests = serviceRequests.filter(
+    (r) => r.status === 'OPEN' || r.status === 'ACKNOWLEDGED',
   );
 
   function dismissBanner() {
@@ -283,36 +328,111 @@ function TabPageInner() {
   }
 
   async function handleAddToTab() {
-    if (!selectedItem) return;
+    if (!selectedItem || !sessionId) return;
     setAddingItem(true);
-    // TODO: POST /api/sessions/[sessionId]/orders once Michael ships the endpoint
-    await new Promise((r) => setTimeout(r, 500));
-    setAddingItem(false);
-    setSelectedItem(null);
-    setKitchenNotes('');
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          menuItemId: selectedItem.id,
+          quantity: 1,
+          notes: kitchenNotes || undefined,
+        }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        order: {
+          id: string;
+          unitPrice: string;
+          taxAmount: string;
+          quantity: number;
+          notes: string | null;
+          status: OrderItemData['status'];
+        };
+      };
+      const o = data.order;
+      setOrders((prev) => [
+        ...prev,
+        {
+          id: o.id,
+          menuItemName: selectedItem.name,
+          unitPrice: o.unitPrice,
+          taxAmount: o.taxAmount,
+          quantity: o.quantity,
+          notes: o.notes,
+          status: o.status,
+        },
+      ]);
+      setSelectedItem(null);
+      setKitchenNotes('');
+    } finally {
+      setAddingItem(false);
+    }
   }
 
   async function sendServiceRequest(type: ServiceRequestType) {
+    if (!sessionId) return;
     setSendingRequest(type);
-    // TODO: POST /api/sessions/[sessionId]/service-requests once Michael ships the endpoint
-    await new Promise((r) => setTimeout(r, 400));
-    setSendingRequest(null);
-    setShowMoreRequests(false);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/service-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        serviceRequest: {
+          id: string;
+          type: ServiceRequestType;
+          status: ServiceRequestData['status'];
+        };
+      };
+      setServiceRequests((prev) => [
+        ...prev,
+        {
+          id: data.serviceRequest.id,
+          type: data.serviceRequest.type,
+          status: data.serviceRequest.status,
+        },
+      ]);
+      setShowMoreRequests(false);
 
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setRequestToast(`${SERVICE_REQUEST_LABELS[type]} — request sent. Your server will be right with you.`);
-    toastTimer.current = setTimeout(() => setRequestToast(''), 4000);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      setRequestToast(
+        `${SERVICE_REQUEST_LABELS[type]} — request sent. Your server will be right with you.`,
+      );
+      toastTimer.current = setTimeout(() => setRequestToast(''), 4000);
+    } finally {
+      setSendingRequest(null);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-gray-400">Loading your tab...</p>
+      </div>
+    );
+  }
+
+  if (bootError || !sessionRow) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6">
+        <p className="text-sm text-gray-700 text-center mb-4">{bootError ?? 'Something went wrong.'}</p>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
-      {/* Nav bar */}
       <header className="sticky top-0 z-20 bg-white border-b border-gray-200 flex items-center justify-between px-4 h-14">
         <div>
-          <p className="text-sm font-bold text-gray-900">{session.restaurantName}</p>
-          <p className="text-xs text-gray-400">Table {session.tableNumber}</p>
+          <p className="text-sm font-bold text-gray-900">{sessionRow.restaurantName}</p>
+          <p className="text-xs text-gray-400">Table {sessionRow.tableNumber}</p>
         </div>
         <button
+          type="button"
           onClick={() => setShowSearch((v) => !v)}
           className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
           aria-label="Search menu"
@@ -323,7 +443,6 @@ function TabPageInner() {
         </button>
       </header>
 
-      {/* Search bar */}
       {showSearch && (
         <div className="bg-white border-b border-gray-200 px-4 py-2">
           <input
@@ -337,7 +456,6 @@ function TabPageInner() {
         </div>
       )}
 
-      {/* How WalkOut Works banner */}
       {!bannerDismissed && (
         <div className="mx-4 mt-4 bg-gray-900 text-white rounded-xl p-4">
           <p className="text-sm font-semibold mb-1">How WalkOut Works</p>
@@ -347,6 +465,7 @@ function TabPageInner() {
             <li>Just leave — we&apos;ll charge your card and send your receipt</li>
           </ol>
           <button
+            type="button"
             onClick={dismissBanner}
             className="mt-3 text-xs text-gray-400 hover:text-white underline"
           >
@@ -355,7 +474,6 @@ function TabPageInner() {
         </div>
       )}
 
-      {/* Hold-failed blocking banner — sticky so it stays visible while scrolling */}
       {holdFailed && (
         <div className="sticky top-14 z-10 mx-0 bg-red-600 text-white px-4 py-3 flex items-start gap-3">
           <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -370,8 +488,7 @@ function TabPageInner() {
         </div>
       )}
 
-      {/* Hold active confirmation */}
-      {session.holdStatus === 'HELD' && (
+      {holdStatus === 'HELD' && (
         <div className="mx-4 mt-4 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
           <svg className="w-4 h-4 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -383,12 +500,9 @@ function TabPageInner() {
       )}
 
       <div className="px-4">
-        {/* Featured items */}
         {popularItems.length > 0 && (
           <div className="mt-6">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              Featured
-            </p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Featured</p>
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
               {popularItems.map((item) => (
                 <button
@@ -418,9 +532,9 @@ function TabPageInner() {
           </div>
         )}
 
-        {/* Category filter pills */}
         <div className="flex gap-2 mt-6 overflow-x-auto pb-1 -mx-4 px-4">
           <button
+            type="button"
             onClick={() => setSelectedCategory(null)}
             className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
               selectedCategory === null
@@ -430,9 +544,10 @@ function TabPageInner() {
           >
             All
           </button>
-          {session.categories.map((cat) => (
+          {categories.map((cat) => (
             <button
               key={cat.id}
+              type="button"
               onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                 selectedCategory === cat.id
@@ -445,20 +560,23 @@ function TabPageInner() {
           ))}
         </div>
 
-        {/* Menu grid */}
         {filteredCategories.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-10">No items found.</p>
         ) : (
           filteredCategories.map((cat) => (
             <div key={cat.id} className="mt-6">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                {cat.name}
-              </p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{cat.name}</p>
               <div className="grid grid-cols-2 gap-3">
                 {cat.items.map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => { if (!holdFailed) { setSelectedItem(item); setKitchenNotes(''); } }}
+                    type="button"
+                    onClick={() => {
+                      if (!holdFailed) {
+                        setSelectedItem(item);
+                        setKitchenNotes('');
+                      }
+                    }}
                     disabled={holdFailed}
                     className={`bg-white border border-gray-200 rounded-xl p-3 text-left transition-colors ${holdFailed ? 'opacity-40 cursor-not-allowed' : 'hover:border-gray-400'}`}
                   >
@@ -474,7 +592,10 @@ function TabPageInner() {
                     {item.allergens.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {item.allergens.slice(0, 3).map((a) => (
-                          <span key={a} className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                          <span
+                            key={a}
+                            className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full"
+                          >
                             {a}
                           </span>
                         ))}
@@ -487,7 +608,6 @@ function TabPageInner() {
           ))
         )}
 
-        {/* My Tab */}
         <div className="mt-8">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">My Tab</p>
           {activeOrders.length === 0 ? (
@@ -498,20 +618,16 @@ function TabPageInner() {
                 <div key={order.id} className="flex items-center justify-between px-4 py-3">
                   <div>
                     <p className="text-sm text-gray-900">
-                      {order.quantity > 1 && (
-                        <span className="font-semibold">{order.quantity}x </span>
-                      )}
+                      {order.quantity > 1 && <span className="font-semibold">{order.quantity}x </span>}
                       {order.menuItemName}
                     </p>
-                    {order.notes && (
-                      <p className="text-xs text-gray-400 mt-0.5 italic">{order.notes}</p>
-                    )}
+                    {order.notes && <p className="text-xs text-gray-400 mt-0.5 italic">{order.notes}</p>}
                   </div>
                   <div className="flex items-center gap-2 ml-4 shrink-0">
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-full border font-medium ${ORDER_STATUS_STYLES[order.status]}`}
+                      className={`text-xs px-2 py-0.5 rounded-full border font-medium ${ORDER_STATUS_STYLES[order.status] ?? ORDER_STATUS_STYLES.PENDING}`}
                     >
-                      {ORDER_STATUS_LABELS[order.status]}
+                      {ORDER_STATUS_LABELS[order.status] ?? order.status}
                     </span>
                     <span className="text-xs text-gray-500">
                       ${new Decimal(order.unitPrice).times(order.quantity).toFixed(2)}
@@ -522,7 +638,6 @@ function TabPageInner() {
             </div>
           )}
 
-          {/* Running total */}
           {activeOrders.length > 0 && (
             <div className="mt-3 bg-white border border-gray-200 rounded-xl px-4 py-3 space-y-1.5">
               <div className="flex justify-between text-sm text-gray-600">
@@ -531,12 +646,12 @@ function TabPageInner() {
               </div>
               <div className="flex justify-between text-sm text-gray-600">
                 <span>
-                  {session.restaurantName} Tax ({new Decimal(session.taxRate).times(100).toFixed(0)}%)
+                  {sessionRow.restaurantName} Tax ({new Decimal(sessionRow.taxRate).times(100).toFixed(0)}%)
                 </span>
                 <span>${tax.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-600">
-                <span>WalkOut Service Fee (0.5%)</span>
+                <span>WalkOut Service Fee ({feePercentLabel}%)</span>
                 <span>${serviceFee.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm font-semibold text-gray-900 pt-1.5 border-t border-gray-100">
@@ -547,18 +662,12 @@ function TabPageInner() {
           )}
         </div>
 
-        {/* Service Requests */}
         <div className="mt-8">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-            Need something?
-          </p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Need something?</p>
 
-          {/* Active requests status */}
           {activeRequests.map((req) => (
             <div key={req.id} className="mb-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-              <p className="text-xs text-blue-700 font-medium">
-                {SERVICE_REQUEST_LABELS[req.type]}
-              </p>
+              <p className="text-xs text-blue-700 font-medium">{SERVICE_REQUEST_LABELS[req.type]}</p>
               <p className="text-xs text-blue-500 mt-0.5">{SERVICE_STATUS_LABELS[req.status]}</p>
             </div>
           ))}
@@ -567,14 +676,16 @@ function TabPageInner() {
             {QUICK_REQUESTS.map((type) => (
               <button
                 key={type}
+                type="button"
                 disabled={sendingRequest === type}
-                onClick={() => sendServiceRequest(type)}
+                onClick={() => void sendServiceRequest(type)}
                 className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 transition-colors"
               >
                 {sendingRequest === type ? 'Sending...' : SERVICE_REQUEST_LABELS[type]}
               </button>
             ))}
             <button
+              type="button"
               onClick={() => setShowMoreRequests((v) => !v)}
               className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-500 hover:border-gray-400 hover:bg-gray-50 transition-colors"
             >
@@ -589,8 +700,9 @@ function TabPageInner() {
                 .map((type) => (
                   <button
                     key={type}
+                    type="button"
                     disabled={sendingRequest === type}
-                    onClick={() => sendServiceRequest(type)}
+                    onClick={() => void sendServiceRequest(type)}
                     className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 transition-colors"
                   >
                     {sendingRequest === type ? 'Sending...' : SERVICE_REQUEST_LABELS[type]}
@@ -601,22 +713,33 @@ function TabPageInner() {
         </div>
       </div>
 
-      {/* Idle warning toast */}
+      {sessionRow.status === 'OPEN' && !holdFailed && sessionId && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-gray-200 bg-white/95 backdrop-blur px-4 py-3 pb-safe">
+          <Link
+            href={`/tab/${sessionId}/pay`}
+            className="flex h-12 w-full items-center justify-center rounded-xl bg-gray-900 text-sm font-semibold text-white hover:bg-gray-800"
+          >
+            Ready to leave
+          </Link>
+        </div>
+      )}
+
       {isIdle && <IdleWarningToast onDismiss={resetIdle} />}
 
-      {/* Request sent toast */}
       {requestToast && !isIdle && (
         <div className="fixed bottom-6 left-4 right-4 z-50 bg-gray-900 text-white text-xs rounded-xl px-4 py-3 text-center shadow-lg">
           {requestToast}
         </div>
       )}
 
-      {/* Item detail modal */}
       {selectedItem && (
         <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center">
           <div
             className="absolute inset-0 bg-black/50"
-            onClick={() => { setSelectedItem(null); setKitchenNotes(''); }}
+            onClick={() => {
+              setSelectedItem(null);
+              setKitchenNotes('');
+            }}
           />
           <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
             {selectedItem.imageUrl ? (
@@ -629,9 +752,7 @@ function TabPageInner() {
 
             <div className="flex items-start justify-between mb-1">
               <h2 className="text-base font-bold text-gray-900">{selectedItem.name}</h2>
-              <span className="text-base font-semibold text-gray-900 ml-2 shrink-0">
-                ${selectedItem.price}
-              </span>
+              <span className="text-base font-semibold text-gray-900 ml-2 shrink-0">${selectedItem.price}</span>
             </div>
 
             {selectedItem.description && (
@@ -652,11 +773,11 @@ function TabPageInner() {
             )}
 
             <div className="mb-4">
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Notes for the kitchen{' '}
-                <span className="font-normal text-gray-400">(optional)</span>
+              <label htmlFor="kitchen-notes" className="block text-xs font-medium text-gray-700 mb-1">
+                Notes for the kitchen <span className="font-normal text-gray-400">(optional)</span>
               </label>
               <input
+                id="kitchen-notes"
                 type="text"
                 maxLength={200}
                 placeholder="e.g. no onions, well done"
@@ -667,15 +788,16 @@ function TabPageInner() {
             </div>
 
             <button
-              onClick={handleAddToTab}
-              disabled={addingItem || session.holdStatus === 'FAILED'}
+              type="button"
+              onClick={() => void handleAddToTab()}
+              disabled={addingItem || holdFailed}
               className="w-full bg-black text-white rounded-xl py-3 text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
             >
               {addingItem
                 ? 'Adding...'
-                : session.holdStatus === 'FAILED'
-                ? 'Card required before ordering'
-                : `Add to tab — $${selectedItem.price}`}
+                : holdFailed
+                  ? 'Card required before ordering'
+                  : `Add to tab — $${selectedItem.price}`}
             </button>
           </div>
         </div>

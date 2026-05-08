@@ -79,14 +79,3 @@ export async function proxy(request: NextRequest) {
 
   return NextResponse.next();
 }
-
-export const config = {
-  matcher: [
-    '/dashboard/:path*',
-    '/api/restaurant/:path*',
-    '/tab/:path*',
-    '/api/sessions/:path*',
-    '/join/:path*',
-    '/api/join/:path*',
-  ],
-};
