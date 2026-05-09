@@ -49,5 +49,10 @@ export function verifyTipToken(token: string): TipTokenPayload {
     throw new Error('Invalid tip token: missing maxTipCents')
   }
 
+  const expectedCap = Math.floor(subtotalCents * 0.5)
+  if (maxTipCents !== expectedCap) {
+    throw new Error('Invalid tip token: cap mismatch')
+  }
+
   return { participantId, subtotalCents, maxTipCents }
 }

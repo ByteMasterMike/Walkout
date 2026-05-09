@@ -30,8 +30,9 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https://images.walkoutofficial.com",
               "media-src 'self'",
               // API calls: self + external APIs
-              "connect-src 'self' https://*.supabase.com https://generativelanguage.googleapis.com",
-              // No iframes
+              "connect-src 'self' https://*.supabase.com https://generativelanguage.googleapis.com https://api.stripe.com https://*.stripe.com",
+              "frame-src https://js.stripe.com https://hooks.stripe.com",
+              // No iframes embedding this app
               "frame-ancestors 'none'",
               // No plugins
               "object-src 'none'",

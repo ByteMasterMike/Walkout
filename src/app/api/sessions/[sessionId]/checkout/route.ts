@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
+import { getDinerIdFromSession } from '@/lib/diner-session'
 import { validateUuid } from '@/lib/validate'
 import { assignTipPromptTokensForSession } from '@/lib/tip/assignTipPromptTokens'
+import { notifyTipWindowOpened } from '@/lib/notify/tipWindow'
 
 const CheckoutSchema = z.object({
   participantId: z.string().uuid(),
@@ -59,20 +61,22 @@ export async function POST(
     if (!participant) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-  } else if (nextAuthSession?.user?.email) {
+  } else {
+    const dinerId = getDinerIdFromSession(nextAuthSession)
+    if (!dinerId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     const participant = await prisma.tabParticipant.findFirst({
       where: {
         id: participantId,
         sessionId,
-        diner: { email: nextAuthSession.user.email },
+        dinerId,
       },
       select: { id: true },
     })
     if (!participant) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-  } else {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const session = await prisma.tabSession.findUnique({
@@ -156,6 +160,12 @@ export async function POST(
 
     await assignTipPromptTokensForSession(sessionId, { participantIds: [participantId] })
 
+    try {
+      await notifyTipWindowOpened(participantId)
+    } catch (err) {
+      console.error('[checkout] notifyTipWindowOpened', participantId, err)
+    }
+
     return NextResponse.json({ ok: true, sessionKept: true })
   }
 
@@ -175,6 +185,18 @@ export async function POST(
   ])
 
   await assignTipPromptTokensForSession(sessionId)
+
+  const tipRecipients = await prisma.tabParticipant.findMany({
+    where: { sessionId, tipPromptToken: { not: null } },
+    select: { id: true },
+  })
+  for (const row of tipRecipients) {
+    try {
+      await notifyTipWindowOpened(row.id)
+    } catch (err) {
+      console.error('[checkout] notifyTipWindowOpened', row.id, err)
+    }
+  }
 
   return NextResponse.json({ ok: true })
 }

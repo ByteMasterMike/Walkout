@@ -5,7 +5,7 @@
  * Implementation guide: docs/prd/02-payments-and-money.md §11.4, §11.5, §17.8, §18
  */
 
-import type { TipSource } from '@prisma/client'
+import type { TipBehavior, TipSource } from '@prisma/client'
 import { Decimal } from 'decimal.js'
 import { prisma } from '@/lib/prisma'
 import { getStripe } from '@/lib/stripe'
@@ -258,6 +258,43 @@ export function resolveDefaultTip(
   }
   // DINER_DECLINED and AUTO_NONE both produce $0
   return new Decimal(0)
+}
+
+/**
+ * Cron timeout tip resolution: diner preference wins over guest participant.tipBehavior (§18.4).
+ * ASK → same as TIMEOUT_DEFAULT (20%). AUTO_* → fixed % or zero with source AUTO_PREF.
+ */
+export function getTimeoutTipResolution(
+  subtotal: Decimal,
+  participantTipBehavior: TipBehavior,
+  dinerDefaultTipBehavior: TipBehavior | null | undefined,
+): { tipCents: number; resolvedTipSource: TipSource } {
+  const effective = dinerDefaultTipBehavior ?? participantTipBehavior
+
+  if (effective === 'ASK') {
+    const tip = resolveDefaultTip(subtotal, 'TIMEOUT_DEFAULT')
+    return {
+      tipCents: tip.times(100).toDecimalPlaces(0).toNumber(),
+      resolvedTipSource: 'TIMEOUT_DEFAULT',
+    }
+  }
+
+  if (effective === 'AUTO_NONE') {
+    return { tipCents: 0, resolvedTipSource: 'AUTO_PREF' }
+  }
+
+  const pct =
+    effective === 'AUTO_18'
+      ? new Decimal('0.18')
+      : effective === 'AUTO_22'
+        ? new Decimal('0.22')
+        : new Decimal('0.20') // AUTO_20
+
+  const tip = subtotal.times(pct).toDecimalPlaces(2)
+  return {
+    tipCents: tip.times(100).toDecimalPlaces(0).toNumber(),
+    resolvedTipSource: 'AUTO_PREF',
+  }
 }
 
 // ================================================================

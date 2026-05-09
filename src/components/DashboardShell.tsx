@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
-type Role = 'ADMIN' | 'MANAGER' | 'STAFF';
+type Role = 'ADMIN' | 'MANAGER' | 'STAFF' | 'DINER';
 
 interface NavItem {
   href: string;
@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/floor',         label: 'Floor Setup',       roles: ['ADMIN', 'MANAGER'] },
   { href: '/dashboard/menu',          label: 'Menu',              roles: ['ADMIN', 'MANAGER'] },
   { href: '/dashboard/settlements',   label: 'Settlements',       roles: ['ADMIN', 'MANAGER'] },
+  { href: '/dashboard/analytics', label: 'Analytics', roles: ['ADMIN', 'MANAGER'] },
   { href: '/dashboard/analytics/tips', label: 'Tip Analytics',    roles: ['ADMIN', 'MANAGER'] },
   { href: '/dashboard/setup',         label: 'Table Setup',       roles: ['ADMIN'] },
   { href: '/dashboard/setup/staff',   label: 'Staff',             roles: ['ADMIN', 'MANAGER'] },

@@ -6,6 +6,41 @@ import { prisma } from './prisma';
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Credentials({
+      id: 'diner',
+      name: 'Diner',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
+        const emailTrimmed = (credentials.email as string).trim().toLowerCase();
+        const password = credentials.password as string;
+
+        const diner = await prisma.diner.findUnique({
+          where: { email: emailTrimmed },
+        });
+        if (!diner) return null;
+        const valid = await bcrypt.compare(password, diner.passwordHash);
+        if (!valid) return null;
+
+        await prisma.diner.update({
+          where: { id: diner.id },
+          data: { lastLoginAt: new Date() },
+        });
+
+        return {
+          id: diner.id,
+          email: diner.email,
+          name: diner.name,
+          restaurantId: null,
+          staffId: null,
+          dinerId: diner.id,
+          role: 'DINER' as const,
+        };
+      },
+    }),
+    Credentials({
       id: 'restaurant',
       name: 'Restaurant / Staff',
       credentials: {
@@ -59,17 +94,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.restaurantId = (user as { restaurantId: string }).restaurantId;
-        token.staffId = (user as { staffId?: string }).staffId ?? null;
-        token.role = (user as { role: 'ADMIN' | 'MANAGER' | 'STAFF' }).role;
+        const u = user as {
+          restaurantId?: string | null;
+          staffId?: string | null;
+          dinerId?: string | null;
+          role: 'ADMIN' | 'MANAGER' | 'STAFF' | 'DINER';
+        };
+        token.restaurantId = u.restaurantId ?? null;
+        token.staffId = u.staffId ?? null;
+        token.dinerId = u.dinerId ?? null;
+        token.role = u.role;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.restaurantId = token.restaurantId as string;
-        session.user.staffId = token.staffId as string | null;
-        session.user.role = token.role as 'ADMIN' | 'MANAGER' | 'STAFF';
+        session.user.restaurantId = (token.restaurantId as string | null | undefined) ?? undefined;
+        session.user.staffId = (token.staffId as string | null | undefined) ?? undefined;
+        session.user.dinerId = (token.dinerId as string | null | undefined) ?? undefined;
+        session.user.role = token.role as 'ADMIN' | 'MANAGER' | 'STAFF' | 'DINER';
       }
       return session;
     },
