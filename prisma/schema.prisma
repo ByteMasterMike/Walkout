@@ -194,7 +194,7 @@ model Restaurant {
   tipPoolDisclaimerAt       DateTime?
   absorbTipProcessingFee    Boolean             @default(false)
 
-  cloudPrintDeviceId        String?
+  cloudPrintDeviceId        String?  @unique
   cloudPrintEnabled         Boolean             @default(false)
   cloudPrintAllowedIp       String?
 
