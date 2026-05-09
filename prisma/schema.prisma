@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ================================================================
@@ -193,8 +194,7 @@ model Restaurant {
   tipPoolDisclaimerAt       DateTime?
   absorbTipProcessingFee    Boolean             @default(false)
 
-  cloudPrintDeviceId        String?             @unique
-  cloudPrintAllowedIp       String?
+  cloudPrintDeviceId        String?
   cloudPrintEnabled         Boolean             @default(false)
 
   inviteCode                String              @unique @default(uuid())
@@ -500,8 +500,6 @@ model Diner {
   defaultDietaryNotes       String?
 
   pushSubscription Json?
-
-  lastLoginAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
