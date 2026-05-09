@@ -256,6 +256,11 @@ model RestaurantStaff {
   acknowledgedRequests ServiceRequest[]   @relation("AckedBy")
   tipPoolEntries       TipPoolEntry[]     @relation("TipPoolEntryStaff")
   assignedTips         TabParticipant[]   @relation("TipAssignedTo")
+  
+  cloudPrintDeviceId   String?
+  cloudPrintEnabled    Boolean  @default(false)
+  cloudPrintAllowedIp  String?
+
 
   @@index([restaurantId])
   @@index([email])
