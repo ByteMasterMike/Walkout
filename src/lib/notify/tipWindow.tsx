@@ -46,7 +46,7 @@ export async function notifyTipWindowOpened(participantId: string): Promise<void
     return;
   }
 
-  const tipUrl = `${baseUrl()}/tip/${encodeURIComponent(p.tipPromptToken)}`;
+  const tipUrl = `${baseUrl()}/tip/token/${encodeURIComponent(p.tipPromptToken)}`;
   const restaurantName = p.session.restaurant.name;
 
   if (p.diner?.pushSubscription) {
