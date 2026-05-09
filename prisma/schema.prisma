@@ -196,6 +196,7 @@ model Restaurant {
 
   cloudPrintDeviceId        String?
   cloudPrintEnabled         Boolean             @default(false)
+  cloudPrintAllowedIp       String?
 
   inviteCode                String              @unique @default(uuid())
 
