@@ -11,14 +11,23 @@ const PatchSchema = z.object({
   tipDistributionMode: z.enum(['DIRECT', 'POOL']).optional(),
   absorbTipProcessingFee: z.boolean().optional(),
   tipPoolDisclaimerAccepted: z.boolean().optional(),
-  cloudPrintDeviceId: z.union([z.string().min(1).max(128), z.null()]).optional(),
+  cloudPrintDeviceId: z.union([z.string().trim().min(1).max(128), z.null()]).optional(),
   cloudPrintEnabled: z.boolean().optional(),
-  
-   
+  cloudPrintAllowedIp: z
+    .union([
+      z.literal(''),
+      z.string().regex(ipv4OrCidrRegex),
+      z.null(),
+    ])
+    .optional(),
+  taxRate: z.coerce.number().min(0).max(0.5).optional(),
+  taxLabel: z.string().trim().min(1).max(80).optional(),
+  timezone: z.string().trim().min(1).max(80).optional(),
+  completeOnboarding: z.literal(true).optional(),
 });
 
 /**
- * GET /api/restaurant/settings — ADMIN (restaurant preferences needed for setup / Phase 4).
+ * GET /api/restaurant/settings: ADMIN (restaurant preferences needed for setup / Phase 4).
  */
 export async function GET() {
   const session = await auth();
@@ -34,6 +43,11 @@ export async function GET() {
       tipPoolDisclaimerAt: true,
       cloudPrintDeviceId: true,
       cloudPrintEnabled: true,
+      cloudPrintAllowedIp: true,
+      taxRate: true,
+      taxLabel: true,
+      timezone: true,
+      onboardingCompletedAt: true,
     },
   });
 
@@ -45,11 +59,16 @@ export async function GET() {
 }
 
 /**
- * PATCH /api/restaurant/settings — ADMIN only.
+ * PATCH /api/restaurant/settings: ADMIN (full); MANAGER may patch tax/timezone/onboarding completion only.
  */
 export async function PATCH(request: Request) {
   const session = await auth();
-  if (!session?.user?.restaurantId || session.user.role !== 'ADMIN') {
+  if (!session?.user?.restaurantId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const role = session.user.role;
+  if (role !== 'ADMIN' && role !== 'MANAGER') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -63,6 +82,23 @@ export async function PATCH(request: Request) {
   const parsed = PatchSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+  }
+
+  const managerAllowedKeys = new Set([
+    'taxRate',
+    'taxLabel',
+    'timezone',
+    'completeOnboarding',
+  ]);
+
+  if (role === 'MANAGER') {
+    const touched = Object.entries(parsed.data)
+      .filter(([, v]) => v !== undefined)
+      .map(([k]) => k);
+    const forbidden = touched.some((k) => !managerAllowedKeys.has(k));
+    if (forbidden) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   const update: Prisma.RestaurantUpdateInput = {};
@@ -80,8 +116,24 @@ export async function PATCH(request: Request) {
   if (data.cloudPrintEnabled !== undefined) {
     update.cloudPrintEnabled = data.cloudPrintEnabled;
   }
+  if (data.cloudPrintAllowedIp !== undefined) {
+    // Empty string from the form means "clear the value"; normalize to null.
+    update.cloudPrintAllowedIp = data.cloudPrintAllowedIp === '' ? null : data.cloudPrintAllowedIp;
+  }
   if (data.tipPoolDisclaimerAccepted === true) {
     update.tipPoolDisclaimerAt = new Date();
+  }
+  if (data.taxRate !== undefined) {
+    update.taxRate = new Prisma.Decimal(data.taxRate);
+  }
+  if (data.taxLabel !== undefined) {
+    update.taxLabel = data.taxLabel;
+  }
+  if (data.timezone !== undefined) {
+    update.timezone = data.timezone;
+  }
+  if (data.completeOnboarding === true) {
+    update.onboardingCompletedAt = new Date();
   }
 
   try {
@@ -94,6 +146,11 @@ export async function PATCH(request: Request) {
         tipPoolDisclaimerAt: true,
         cloudPrintDeviceId: true,
         cloudPrintEnabled: true,
+        cloudPrintAllowedIp: true,
+        taxRate: true,
+        taxLabel: true,
+        timezone: true,
+        onboardingCompletedAt: true,
       },
     });
 
@@ -102,6 +159,7 @@ export async function PATCH(request: Request) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
       return NextResponse.json({ error: 'Device ID already in use' }, { status: 409 });
     }
+    console.error('[restaurant/settings PATCH] update failed', e);
     throw e;
   }
 }
