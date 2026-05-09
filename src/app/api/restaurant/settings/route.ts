@@ -13,7 +13,7 @@ const PatchSchema = z.object({
   tipPoolDisclaimerAccepted: z.boolean().optional(),
   cloudPrintDeviceId: z.union([z.string().min(1).max(128), z.null()]).optional(),
   cloudPrintEnabled: z.boolean().optional(),
-  cloudPrintAllowedIp: z
+  
     .union([
       z.literal(''),
       z.string().regex(ipv4OrCidrRegex),
@@ -39,7 +39,6 @@ export async function GET() {
       tipPoolDisclaimerAt: true,
       cloudPrintDeviceId: true,
       cloudPrintEnabled: true,
-      cloudPrintAllowedIp: true,
     },
   });
 
@@ -86,10 +85,6 @@ export async function PATCH(request: Request) {
   if (data.cloudPrintEnabled !== undefined) {
     update.cloudPrintEnabled = data.cloudPrintEnabled;
   }
-  if (data.cloudPrintAllowedIp !== undefined) {
-    update.cloudPrintAllowedIp =
-      data.cloudPrintAllowedIp === '' ? null : data.cloudPrintAllowedIp;
-  }
   if (data.tipPoolDisclaimerAccepted === true) {
     update.tipPoolDisclaimerAt = new Date();
   }
@@ -104,7 +99,6 @@ export async function PATCH(request: Request) {
         tipPoolDisclaimerAt: true,
         cloudPrintDeviceId: true,
         cloudPrintEnabled: true,
-        cloudPrintAllowedIp: true,
       },
     });
 
