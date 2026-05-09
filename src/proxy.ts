@@ -1,13 +1,22 @@
-import NextAuth from 'next-auth';
-import { authConfig } from '@/lib/auth.config';
-const { auth } = NextAuth(authConfig);
+import { auth } from '@/lib/auth';
+import { enforceJoinLimit, enforceWriteLimit } from '@/lib/rate-limit';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // ── Public paths — always allow through ──────────────────────────
+  // Baseline write rate limits (PRD 25.8 join + Phase 6 session POSTs; Redis required in production)
+  if (request.method === 'POST' && pathname.startsWith('/api/join/')) {
+    const limited = await enforceJoinLimit(request);
+    if (limited) return limited;
+  }
+  if (request.method === 'POST' && pathname.startsWith('/api/sessions/')) {
+    const limited = await enforceWriteLimit(request);
+    if (limited) return limited;
+  }
+
+  // Public paths: always allow through
   if (
     pathname.startsWith('/join/') ||
     pathname.startsWith('/api/join/') ||
@@ -17,7 +26,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Diner / guest session paths — forward anon cookie ────────────
+  // Diner / guest session paths: forward anon cookie
   if (pathname.startsWith('/tab') || pathname.startsWith('/api/sessions')) {
     const anonToken = request.cookies.get('tabs_anon')?.value;
     if (anonToken) {
@@ -29,16 +38,15 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Restaurant / Staff dashboard paths ───────────────────────────
-  // Owner self-service registration — must not require an existing session
-  // (otherwise fetch POST follows 307 → POST /auth/login → 405).
+  // Restaurant / Staff dashboard paths
+  // Owner self-service registration must not require an existing session
+  // (otherwise fetch POST follows 307 to POST /auth/login and 405s).
   if (pathname === '/api/restaurant/register') {
     return NextResponse.next();
   }
 
   if (pathname.startsWith('/dashboard') || pathname.startsWith('/api/restaurant')) {
     const session = await auth();
-
     if (!session?.user?.restaurantId) {
       const loginUrl = new URL('/auth/login', request.url);
       loginUrl.searchParams.set('callbackUrl', pathname);
@@ -47,13 +55,12 @@ export async function proxy(request: NextRequest) {
 
     const { role } = session.user;
 
-    // ADMIN-only routes — invite and Stripe setup remain ADMIN-only
+    // ADMIN-only routes: invite and Stripe setup remain ADMIN-only
     const adminOnlyPaths = [
       '/dashboard/setup/stripe',
       '/dashboard/setup/printer',
       '/api/restaurant/stripe',
       '/api/restaurant/staff/invite',
-      '/api/restaurant/settings',
       '/api/restaurant/print-jobs',
     ];
     if (adminOnlyPaths.some((p) => pathname.startsWith(p))) {
@@ -62,9 +69,10 @@ export async function proxy(request: NextRequest) {
       }
     }
 
-    // MANAGER+ routes — Staff list/page promoted to MANAGER+ per PRD §21.2
+    // MANAGER+ routes: Staff list/page promoted to MANAGER+ per PRD 21.2
     const managerPlusPaths = [
       '/dashboard/floor',
+      '/dashboard/onboarding',
       '/dashboard/setup/staff',
       '/dashboard/analytics',
       '/dashboard/settlements',
