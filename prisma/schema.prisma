@@ -512,6 +512,8 @@ model Diner {
 
   participants TabParticipant[]
 
+  lastLoginAt  DateTime?
+
   @@map("diners")
 }
 
