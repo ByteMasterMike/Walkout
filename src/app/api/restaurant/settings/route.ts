@@ -14,12 +14,7 @@ const PatchSchema = z.object({
   cloudPrintDeviceId: z.union([z.string().min(1).max(128), z.null()]).optional(),
   cloudPrintEnabled: z.boolean().optional(),
   
-    .union([
-      z.literal(''),
-      z.string().regex(ipv4OrCidrRegex),
-      z.null(),
-    ])
-    .optional(),
+   
 });
 
 /**
