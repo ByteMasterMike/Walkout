@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "verify:phase3": "node scripts/phase3-verify.mjs",
+    "test:twilio-webhook": "node scripts/test-payment-failed-webhook.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui"

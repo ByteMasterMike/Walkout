@@ -12,7 +12,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.title, {
       body: data.body,
       data: { url: data.url || '/' },
-      icon: '/icon.png',
+      icon: '/icon-48.png',
     }),
   );
 });
