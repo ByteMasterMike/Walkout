@@ -101,7 +101,7 @@ function Hero() {
       <div className="mt-20 grid grid-cols-1 gap-12 md:grid-cols-2">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 1.4 }}>
           <p className="max-w-[460px] font-body text-lg leading-relaxed text-foreground md:text-xl">
-            Walkout is the operating system that turns a meal into a <em className="italic text-primary">tap, eat, leave</em>. The card pays itself. The table turns itself. The receipt is waiting on your phone before you reach the door.
+            WalkOut is the operating system that turns a meal into a <em className="italic text-primary">tap, eat, leave</em>. Dining the way it was always supposed to feel. Because the best service is the kind you never have to think about.
           </p>
           <div className="mt-6 flex items-center gap-3">
             <div className="h-px w-10 bg-primary" />

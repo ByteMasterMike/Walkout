@@ -27,9 +27,15 @@ const jetbrainsMono = JetBrains_Mono({
   display: 'swap',
 });
 
+const siteDescription =
+  'WalkOut is the operating system that turns a meal into a tap, eat, leave. Dining the way it was always supposed to feel. Because the best service is the kind you never have to think about.';
+
 export const metadata: Metadata = {
   title: 'Walkout — an operating system for restaurants',
-  description: 'No check. No wait. Just go.',
+  description: siteDescription,
+  openGraph: {
+    description: siteDescription,
+  },
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },
