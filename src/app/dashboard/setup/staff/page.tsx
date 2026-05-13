@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { PageShell, PageHead } from '@/components/pitch';
+
 type StaffMember = {
   id: string;
   name: string;
@@ -17,12 +19,6 @@ type StaffMember = {
 const ROLE_LABELS: Record<string, string> = {
   MANAGER: 'Manager',
   STAFF: 'Staff',
-};
-
-const STATUS_STYLES: Record<string, string> = {
-  PENDING: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  ACCEPTED: 'bg-green-50 text-green-700 border-green-200',
-  EXPIRED: 'bg-gray-100 text-gray-500 border-gray-200',
 };
 
 export default function StaffPage() {
@@ -84,15 +80,18 @@ export default function StaffPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-10">
-      <h1 className="text-xl font-bold text-gray-900 mb-1">Staff Management</h1>
-      <p className="text-sm text-gray-500 mb-8">
-        Invite team members. They receive an email to set their password and activate their account.
-      </p>
+    <PageShell>
+      <PageHead
+        title={
+          <>
+            Staff <em>management</em>
+          </>
+        }
+        subtitle={<>Invite team members. They receive an email to set their password and activate their account.</>}
+      />
 
-      {/* Invite form */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-8">
-        <h2 className="text-sm font-semibold text-gray-900 mb-4">Invite a team member</h2>
+      <div className="card mb-10">
+        <h3 className="font-display text-2xl font-light text-foreground">Invite a team member</h3>
         <form onSubmit={handleInvite} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -155,38 +154,40 @@ export default function StaffPage() {
         </form>
       </div>
 
-      {/* Staff list */}
-      <h2 className="text-sm font-semibold text-gray-900 mb-3">Team members</h2>
+      <div className="mono mb-3 mt-40">Team members</div>
       {loading ? (
-        <p className="text-sm text-gray-400 py-6 text-center">Loading...</p>
+        <p className="py-6 text-center font-body text-sm text-muted-foreground">Loading...</p>
       ) : staff.length === 0 ? (
-        <p className="text-sm text-gray-400 py-10 text-center">
+        <p className="py-10 text-center font-body text-sm text-muted-foreground">
           No staff yet. Send an invite above.
         </p>
       ) : (
-        <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
+        <div className="staff-list">
           {staff.map((member) => (
-            <div key={member.id} className="flex items-center justify-between px-4 py-3 bg-white">
-              <div>
-                <p className="text-sm font-medium text-gray-900">{member.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{member.email}</p>
+            <div key={member.id} className="staff-row">
+              <div className="l">
+                <div className="av">{member.name.slice(0, 2).toUpperCase()}</div>
+                <div>
+                  <div className="nm">{member.name}</div>
+                  <div className="em">{member.email}</div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0 ml-4">
-                <span className="text-xs text-gray-500">{ROLE_LABELS[member.role]}</span>
+              <div className="flex items-center gap-2">
+                <span className="role">{ROLE_LABELS[member.role]}</span>
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_STYLES[member.inviteStatus]}`}
+                  className={`badge ${member.inviteStatus === 'PENDING' ? 'pen' : 'act'}`}
                 >
                   {member.inviteStatus === 'PENDING'
-                    ? 'Invite pending'
+                    ? 'Pending'
                     : member.inviteStatus === 'ACCEPTED'
-                    ? 'Active'
-                    : 'Expired'}
+                      ? 'Active'
+                      : 'Expired'}
                 </span>
               </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

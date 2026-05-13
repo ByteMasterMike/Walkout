@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PageShell, PageHead } from '@/components/pitch';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -147,34 +148,39 @@ export default function RequestsPage() {
   const resolved = requests.filter((r) => r.status === 'RESOLVED');
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8 md:px-6">
-      <div className="mb-6 flex items-end justify-between gap-4 border-b border-border pb-6">
-        <div>
-          <h1 className="font-display text-3xl font-light tracking-[-0.03em] text-foreground">Service Requests</h1>
-          <p className="mt-2 font-body text-muted-foreground">
-            {open.length} open{acknowledged.length > 0 ? `, ${acknowledged.length} acknowledged` : ''}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={toggleChime}
-          className={`rounded-full border px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors ${
-            chimeEnabled
-              ? 'border-transparent bg-invert text-invert-foreground'
-              : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
-          }`}
-        >
-          {chimeEnabled ? 'Chime on' : 'Chime off'}
-        </button>
-      </div>
+    <PageShell>
+      <PageHead
+        title={
+          <>
+            Service <em>requests</em>
+          </>
+        }
+        subtitle={
+          <>
+            {open.length} open{acknowledged.length > 0 ? ` · ${acknowledged.length} acknowledged` : ''}
+          </>
+        }
+        actions={
+          <button
+            type="button"
+            onClick={toggleChime}
+            className={`rounded-full border px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors ${
+              chimeEnabled
+                ? 'border-transparent bg-invert text-invert-foreground'
+                : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
+            }`}
+          >
+            {chimeEnabled ? 'Chime on' : 'Chime off'}
+          </button>
+        }
+      />
 
       {requests.length === 0 ? (
         <div className="py-16 text-center">
           <p className="font-body text-muted-foreground">No open requests.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
-          {/* Open requests */}
+        <div className="req-list">
           {open.map((req) => (
             <RequestRow
               key={req.id}
@@ -184,7 +190,6 @@ export default function RequestsPage() {
             />
           ))}
 
-          {/* Acknowledged */}
           {acknowledged.map((req) => (
             <RequestRow
               key={req.id}
@@ -194,7 +199,6 @@ export default function RequestsPage() {
             />
           ))}
 
-          {/* Resolved (last 10, dimmed) */}
           {resolved.slice(0, 10).map((req) => (
             <RequestRow
               key={req.id}
@@ -205,7 +209,7 @@ export default function RequestsPage() {
           ))}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 
@@ -224,33 +228,23 @@ function RequestRow({
 
   return (
     <div
-      className={`flex items-center gap-[18px] rounded-xl border px-5 py-4 transition-all ${
-        isResolved
-          ? 'border-border bg-muted/30 opacity-50'
-          : isAcknowledged
-          ? 'border-moss/40 bg-moss/10'
-          : 'border-border bg-card shadow-sm'
-      }`}
+      className={`req ${isAcknowledged || isResolved ? 'ack' : ''} ${isResolved ? '!opacity-50' : ''} flex-wrap sm:flex-nowrap`}
     >
-      <div
-        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-          isResolved ? 'bg-muted-foreground' : isAcknowledged ? 'bg-moss' : 'bg-primary animate-pulse'
-        }`}
-      />
-      <div className="min-w-0 flex-1">
-        <p
-          className={`font-display text-2xl font-light leading-none tracking-[-0.02em] ${isResolved ? 'text-muted-foreground' : 'text-foreground'}`}
-        >
+      <div className="dot" />
+      <div className="body">
+        <div className="ttl">
           Table {req.tableNumber} — {TYPE_LABELS[req.type] ?? req.type}
-          {req.notes && <span className="font-body text-[15px] font-normal text-muted-foreground"> ({req.notes})</span>}
-        </p>
-        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+          {req.notes && (
+            <span className="font-body text-[15px] font-normal text-muted-foreground"> ({req.notes})</span>
+          )}
+        </div>
+        <div className="meta">
           {req.dinerName} · {elapsedLabel(req.createdAt)}
           {req.acknowledgedByName && ` · ${req.acknowledgedByName}`}
-        </p>
+        </div>
       </div>
 
-      <div className="ml-2 flex shrink-0 gap-2">
+      <div className="ml-2 flex shrink-0 flex-wrap gap-2">
         {isOpen && (
           <button
             type="button"

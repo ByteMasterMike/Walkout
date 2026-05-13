@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 
 import { useRestaurantStream } from '@/hooks/useRestaurantStream';
+import { PageShell, PageHead, PageHeadMetaDot } from '@/components/pitch';
 
 type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'CLOSING';
 type HoldStatus =
@@ -44,18 +45,6 @@ function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-const STATUS_RING: Record<TableStatus, string> = {
-  AVAILABLE: 'ring-moss/50',
-  OCCUPIED: 'ring-primary/50',
-  CLOSING: 'ring-blood/50',
-};
-
-const STATUS_BG: Record<TableStatus, string> = {
-  AVAILABLE: 'bg-card border-moss/30 hover:border-moss/50',
-  OCCUPIED: 'bg-amber-soft border-amber-soft-line hover:border-primary/50',
-  CLOSING: 'bg-destructive/10 border-destructive/40 hover:border-destructive/60',
-};
-
 const STATUS_LABEL: Record<TableStatus, string> = {
   AVAILABLE: 'Available',
   OCCUPIED: 'Occupied',
@@ -63,6 +52,12 @@ const STATUS_LABEL: Record<TableStatus, string> = {
 };
 
 const CASH_BANNER_DISMISS_KEY = 'walkout:cash-banner-dismissed';
+
+function tTileModifier(status: TableStatus): string {
+  if (status === 'OCCUPIED') return 'occ';
+  if (status === 'CLOSING') return 'close';
+  return '';
+}
 
 export default function TablesPage() {
   const { data: authSession } = useSession();
@@ -122,28 +117,27 @@ export default function TablesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 md:px-8">
-      <div className="mb-6 flex max-w-4xl items-end justify-between gap-4 border-b border-border pb-6 mx-auto">
-        <div>
-          <h1 className="font-display text-3xl font-light tracking-[-0.03em] text-foreground md:text-4xl">
-            Live Tables
-          </h1>
-          <p className="mt-2 font-body text-muted-foreground">
-            {occupied} of {tables.length} tables occupied
-          </p>
-        </div>
-        <div className="flex items-center gap-2 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
-          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-          <span>Live</span>
-        </div>
-      </div>
+    <PageShell>
+      <PageHead
+        title={
+          <>
+            Live <em>tables</em>
+          </>
+        }
+        subtitle={<>Every tab in the room — opens, holds, totals, who&apos;s about to walk.</>}
+        meta={
+          <>
+            <PageHeadMetaDot />
+            Live · {occupied} / {tables.length || '—'} occupied
+          </>
+        }
+      />
 
       {showCashBanner && (
-        <div className="mx-auto mb-4 flex max-w-4xl flex-wrap items-start justify-between gap-3 rounded-[14px] border border-amber-soft-line bg-amber-soft px-4 py-3">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-[14px] border border-amber-soft-line bg-amber-soft px-4 py-3">
           <p className="text-sm text-foreground">
             <span className="font-semibold">Cash payment — collect cash on the floor.</span>{' '}
-            Tables:{' '}
-            {cashAlertTables.map((t) => t.tableNumber).join(', ')}. Open each table to mark cash
+            Tables: {cashAlertTables.map((t) => t.tableNumber).join(', ')}. Open each table to mark cash
             collected.
           </p>
           <button
@@ -159,68 +153,59 @@ export default function TablesPage() {
       {loading ? (
         <p className="py-16 text-center font-body text-muted-foreground">Loading tables...</p>
       ) : (
-        <div className="mx-auto grid max-w-5xl grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="tables-grid">
           {tables.map((table) => (
             <TableCard key={table.id} table={table} />
           ))}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 
 function TableCard({ table }: { table: LiveTable }) {
   const elapsed = elapsedLabel(table.openedAt);
+  const mod = tTileModifier(table.status);
 
   return (
     <Link
       href={`/dashboard/tables/${table.id}`}
-      className={`block min-h-[140px] rounded-[14px] border-2 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${STATUS_BG[table.status]} ring-2 ${STATUS_RING[table.status]}`}
+      className={`t-tile !no-underline ${mod}`.trim()}
     >
-      <div className="mb-3 flex items-start justify-between">
-        <span className="font-display text-[30px] font-light leading-none tracking-[-0.02em] text-foreground">
-          {table.tableNumber}
-        </span>
-        <div className="flex flex-col items-end gap-1">
-          {table.hasOpenServiceRequest && (
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" title="Open service request" />
-          )}
-          {table.hasFailedHold && (
-            <span className="h-1.5 w-1.5 rounded-full bg-destructive" title="Failed hold" />
-          )}
-          {table.hasCashParticipant && (
-            <span className="font-mono text-[10px] text-muted-foreground" title="Cash payment">
-              $
-            </span>
-          )}
+      <div className="top">
+        <div className="num">
+          {table.status === 'AVAILABLE' ? table.tableNumber : <em>{table.tableNumber}</em>}
+        </div>
+        <div className="state">
+          <span className="d" />
+          {STATUS_LABEL[table.status]}
         </div>
       </div>
+      {(table.hasOpenServiceRequest || table.hasFailedHold || table.hasCashParticipant) && (
+        <div className="flex flex-wrap gap-2 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+          {table.hasOpenServiceRequest ? <span>Request</span> : null}
+          {table.hasFailedHold ? <span className="text-destructive">Hold</span> : null}
+          {table.hasCashParticipant ? <span className="text-primary">Cash</span> : null}
+        </div>
+      )}
 
-      {table.status === 'AVAILABLE' ? (
-        <p className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-moss">{STATUS_LABEL[table.status]}</p>
-      ) : (
+      {table.status === 'AVAILABLE' ? null : (
         <>
-          <p className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-primary">{STATUS_LABEL[table.status]}</p>
-          <p className="mt-1 font-body text-sm text-muted-foreground">
+          <div className="who">
             {table.coverCount} {table.coverCount === 1 ? 'cover' : 'covers'} · {elapsed}
-          </p>
-          <p className="mt-1 font-display text-[22px] font-light text-primary">{formatCents(table.runningTotalCents)}</p>
+          </div>
+          <div className="total">{formatCents(table.runningTotalCents)}</div>
+          <div className="server">
+            {table.assignedServerName
+              ? `${table.assignedServerName} · live`
+              : 'Unassigned · live'}
+          </div>
         </>
       )}
 
-      <div className="mt-2">
-        {table.assignedServerName ? (
-          <p className="truncate font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
-            {table.assignedServerName}
-          </p>
-        ) : table.status !== 'AVAILABLE' ? (
-          <p className="text-sm font-medium text-primary">Unassigned</p>
-        ) : null}
-      </div>
-
-      {table.hasFailedHold && (
-        <p className="mt-2 text-xs font-medium text-destructive">Card declined</p>
-      )}
+      {table.hasFailedHold ? (
+        <p className="font-body text-xs font-medium text-destructive">Card declined</p>
+      ) : null}
     </Link>
   );
 }

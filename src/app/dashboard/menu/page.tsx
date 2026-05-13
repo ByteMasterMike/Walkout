@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { PageShell, PageHead } from '@/components/pitch';
 
 // ---------------------------------------------------------------------------
 // Types — mirrors shape from /api/restaurants/[restaurantId]/menu
@@ -62,6 +63,7 @@ export default function MenuPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
+  const [activeMenuCat, setActiveMenuCat] = useState<string | null>(null);
 
   async function loadMenu() {
     // TODO: fetch from /api/restaurants/[restaurantId]/menu once Michael ships it
@@ -70,6 +72,16 @@ export default function MenuPage() {
   }
 
   useEffect(() => { loadMenu(); }, []);
+
+  useEffect(() => {
+    if (categories.length === 0) {
+      setActiveMenuCat(null);
+      return;
+    }
+    setActiveMenuCat((prev) =>
+      prev && categories.some((c) => c.id === prev) ? prev : categories[0].id,
+    );
+  }, [categories]);
 
   async function handleAddCategory(e: React.FormEvent) {
     e.preventDefault();
@@ -166,27 +178,40 @@ export default function MenuPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 md:px-6">
-      <h1 className="mb-1 font-display text-3xl font-light tracking-[-0.03em] text-foreground">Menu</h1>
-      <p className="mb-8 font-body text-muted-foreground">
-        Manage categories and items. Tap the toggle to 86 an item from the menu instantly.
-      </p>
+    <PageShell>
+      <PageHead
+        title={
+          <>
+            The <em>menu</em>
+          </>
+        }
+        subtitle={<>Categories, items, photos, prices. 86 anything in one tap.</>}
+        actions={
+          <button
+            type="button"
+            disabled={!activeMenuCat}
+            onClick={() => activeMenuCat && openAddItem(activeMenuCat)}
+            className="rounded-full bg-primary px-5 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-primary-foreground transition-colors hover:bg-amber-light disabled:opacity-40"
+          >
+            + New item
+          </button>
+        }
+      />
 
-      {/* Add category */}
-      <form onSubmit={handleAddCategory} className="mb-8 flex gap-3">
+      <form onSubmit={handleAddCategory} className="t-add">
         <input
           type="text"
           required
           maxLength={80}
-          placeholder="New category name (e.g. Starters)"
+          placeholder="Table number or name (e.g. 1 or Bar)"
           value={newCatName}
           onChange={(e) => setNewCatName(e.target.value)}
-          className="min-h-[44px] flex-1 rounded-[10px] border border-border bg-scrim-2 px-4 py-2 font-body text-[17px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          className="min-h-[48px] flex-1 rounded-[10px] border border-border bg-scrim-2 px-4 py-2 font-body text-[17px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         />
         <button
           type="submit"
           disabled={addingCat}
-          className="rounded-full bg-primary px-5 font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-primary-foreground transition-colors hover:bg-amber-light disabled:opacity-50"
+          className="rounded-full bg-invert px-5 font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-invert-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {addingCat ? 'Adding...' : 'Add category'}
         </button>
@@ -204,72 +229,71 @@ export default function MenuPage() {
           No categories yet. Add one above to start building your menu.
         </p>
       ) : (
-        <div className="space-y-6">
-          {categories.map((cat) => (
-            <div key={cat.id} className="overflow-hidden rounded-[14px] border border-border bg-card">
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                <p className="font-display text-[22px] font-light text-foreground">{cat.name}</p>
-                <button
-                  type="button"
-                  onClick={() => openAddItem(cat.id)}
-                  className="rounded-full bg-invert px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-invert-foreground transition-opacity hover:opacity-90"
-                >
-                  Add item
-                </button>
-              </div>
-
-              {cat.items.length === 0 ? (
-                <p className="py-6 text-center font-body text-sm text-muted-foreground">
-                  No items yet. Add one to this category.
-                </p>
-              ) : (
-                <div className="divide-y divide-border">
-                  {cat.items.map((item) => (
-                    <div key={item.id} className="flex items-center gap-4 px-4 py-4">
-                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[10px] bg-scrim-2">
-                        {item.imageUrl && (
-                          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate font-display text-[22px] font-light text-foreground">{item.name}</p>
-                          {item.isPopular && (
-                            <span className="rounded-full border border-amber-soft-line bg-amber-soft px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-primary">
-                              Featured
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-0.5 font-mono text-sm text-primary">${item.price}</p>
-                        {item.allergens.length > 0 && (
-                          <p className="mt-0.5 font-body text-xs text-muted-foreground">{item.allergens.join(', ')}</p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleAvailable(cat.id, item.id, item.isAvailable)}
-                          className={`relative inline-flex h-6 w-11 rounded-full border border-border transition-colors ${
-                            item.isAvailable ? 'bg-primary' : 'bg-scrim-3'
-                          }`}
-                          aria-label={item.isAvailable ? '86 item' : 'Restore item'}
-                        >
-                          <span
-                            className={`absolute left-0.5 top-0.5 h-[18px] w-[18px] rounded-full bg-background shadow transition-transform ${
-                              item.isAvailable ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
-                        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                          {item.isAvailable ? 'Available' : "86'd"}
+        <div className="menu-cols">
+          <div className="menu-cats">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                className={activeMenuCat === cat.id ? 'on' : ''}
+                onClick={() => setActiveMenuCat(cat.id)}
+              >
+                <span>{cat.name}</span>
+                <span className="ct">{cat.items.length}</span>
+              </button>
+            ))}
+          </div>
+          <div className="menu-items">
+            {(() => {
+              const cat = categories.find((c) => c.id === activeMenuCat);
+              if (!cat) {
+                return <p className="font-body text-muted-foreground">Select a category.</p>;
+              }
+              if (cat.items.length === 0) {
+                return (
+                  <p className="py-6 text-center font-body text-sm text-muted-foreground">
+                    No items in this category yet.
+                  </p>
+                );
+              }
+              return cat.items.map((item) => (
+                <div key={item.id} className="menu-row">
+                  <div
+                    className="ph bg-scrim-2"
+                    style={
+                      item.imageUrl
+                        ? { backgroundImage: `url(${item.imageUrl})`, backgroundSize: 'cover' }
+                        : undefined
+                    }
+                  />
+                  <div className="min-w-0">
+                    <div className="nm flex flex-wrap items-center gap-2">
+                      {item.name}
+                      {item.isPopular ? (
+                        <span className="rounded-full border border-amber-soft-line bg-amber-soft px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-primary">
+                          Featured
                         </span>
-                      </div>
+                      ) : null}
                     </div>
-                  ))}
+                    {item.description ? <div className="dsc">{item.description}</div> : null}
+                    {item.allergens.length > 0 ? (
+                      <div className="dsc">{item.allergens.join(', ')}</div>
+                    ) : null}
+                  </div>
+                  <div className="pr">{item.price}</div>
+                  <button
+                    type="button"
+                    aria-label={item.isAvailable ? '86 item' : 'Restore item'}
+                    onClick={() => toggleAvailable(cat.id, item.id, item.isAvailable)}
+                    className={`toggle ${item.isAvailable ? 'on' : ''}`}
+                  />
+                  <span className="mono w-12 text-center text-[9px] text-muted-foreground">
+                    {item.isAvailable ? 'On' : '86'}
+                  </span>
                 </div>
-              )}
-            </div>
-          ))}
+              ));
+            })()}
+          </div>
         </div>
       )}
 
@@ -430,6 +454,6 @@ export default function MenuPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 
 import TipDistributionSection from './TipDistributionSection';
+import { PageShell, PageHead } from '@/components/pitch';
+
 type DiningTable = {
   id: string;
   tableNumber: string;
@@ -64,70 +66,77 @@ export default function SetupPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-10">
-      <h1 className="text-xl font-bold text-gray-900 mb-1">Table Setup</h1>
-      <p className="text-sm text-gray-500 mb-8">
-        Create tables and get NFC tag URLs. Program each NFC sticker with its URL using an NFC
-        writer app.
-      </p>
+    <PageShell>
+      <PageHead
+        title={
+          <>
+            Table <em>setup</em>
+          </>
+        }
+        subtitle={
+          <>
+            Create tables and get NFC tag URLs. Program each NFC sticker with its URL using an NFC
+            writer app.
+          </>
+        }
+        actions={
+          <Link
+            href="/dashboard/setup/printer"
+            className="rounded-full border border-border px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+          >
+            Receipt printer →
+          </Link>
+        }
+      />
 
-      <div className="flex flex-wrap gap-2 mb-8">
-        <Link
-          href="/dashboard/setup/printer"
-          className="text-xs px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          Receipt printer (CloudPRNT)
-        </Link>
-      </div>
-
-      {/* Create table */}
-      <form onSubmit={handleCreate} className="flex gap-3 mb-8">
+      <form onSubmit={handleCreate} className="t-add">
         <input
           type="text"
           required
           placeholder="Table number or name (e.g. 1 or Bar)"
           value={newTable}
           onChange={(e) => setNewTable(e.target.value)}
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+          className="min-h-[48px] flex-1 rounded-[10px] border border-border bg-scrim-2 px-4 py-2 font-body text-[17px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         />
         <button
           type="submit"
           disabled={loading}
-          className="px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors"
+          className="rounded-full bg-invert px-5 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-invert-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {loading ? 'Adding...' : 'Add table'}
         </button>
       </form>
 
       {error && (
-        <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </p>
       )}
 
-      {/* Table list */}
       {tables.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-10">No tables yet. Add one above.</p>
+        <p className="py-10 text-center font-body text-sm text-muted-foreground">No tables yet. Add one above.</p>
       ) : (
-        <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
+        <div className="space-y-0">
           {tables.map((t) => {
             const url = getNfcUrl(t.nfcTagId);
             return (
-              <div key={t.id} className="flex items-center justify-between px-4 py-3 bg-white">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Table {t.tableNumber}</p>
-                  <p className="text-xs text-gray-400 font-mono mt-0.5 truncate max-w-xs">{url}</p>
+              <div key={t.id} className="url-row">
+                <div className="l">
+                  <div className="t">Table {t.tableNumber}</div>
+                  <div className="u">{url}</div>
                 </div>
-                <div className="flex gap-2 shrink-0 ml-4">
+                <div className="r">
                   <button
+                    type="button"
                     onClick={() => navigator.clipboard.writeText(url)}
-                    className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="rounded-full border border-border px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-foreground transition-colors hover:bg-scrim-2"
                   >
                     Copy URL
                   </button>
                   <button
+                    type="button"
                     onClick={() => downloadQr(t.nfcTagId, t.tableNumber)}
-                    className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="rounded-full bg-invert px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-invert-foreground transition-opacity hover:opacity-90"
                   >
                     QR code
                   </button>
@@ -139,6 +148,6 @@ export default function SetupPage() {
       )}
 
       <TipDistributionSection />
-    </div>
+    </PageShell>
   );
 }

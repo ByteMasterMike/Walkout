@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import PrinterSetupClient from './PrinterSetupClient';
+import { PageShell, PageHead } from '@/components/pitch';
 
 export default async function PrinterSetupPage() {
   const session = await auth();
@@ -26,21 +27,29 @@ export default async function PrinterSetupPage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-10">
-      <Link href="/dashboard/setup" className="text-xs text-gray-400 hover:text-gray-600 mb-4 block">
-        Back to table setup
+    <PageShell>
+      <Link href="/dashboard/setup" className="mono mb-6 inline-block text-muted-foreground hover:text-foreground">
+        ← Back to table setup
       </Link>
-      <h1 className="text-xl font-bold text-gray-900 mb-1">Receipt printer (CloudPRNT)</h1>
-      <p className="text-sm text-gray-500 mb-8">
-        Star Micronics mC-Print3 polls WalkOut for queued receipts. Cash payments print automatically
-        and open the drawer via the receipt XML.
-      </p>
+      <PageHead
+        title={
+          <>
+            Receipt <em>printer</em> (CloudPRNT)
+          </>
+        }
+        subtitle={
+          <>
+            Star Micronics mC-Print3 polls WalkOut for queued receipts. Cash payments print automatically
+            and open the drawer via the receipt XML.
+          </>
+        }
+      />
 
       <PrinterSetupClient
         initialDeviceId={cloudPrintDeviceId}
         initialEnabled={cloudPrintEnabled}
         initialAllowedIp={cloudPrintAllowedIp}
       />
-    </div>
+    </PageShell>
   );
 }

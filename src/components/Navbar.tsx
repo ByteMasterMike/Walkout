@@ -5,8 +5,9 @@ import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { LayoutDashboard, Sun, Moon } from 'lucide-react';
+import { ProtoMoonIcon, ProtoSunIcon } from '@/components/icons/prototype';
 import { useTheme } from '@/components/ThemeProvider';
+import { SegmentedNav } from '@/components/pitch/SegmentedNav';
 
 function ChevronLogo({ className }: { className?: string }) {
   return (
@@ -23,14 +24,15 @@ function ChevronLogo({ className }: { className?: string }) {
   );
 }
 
-const navLinks = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-];
-
 export default function Navbar() {
   const { data: session } = useSession();
   const { theme, toggle } = useTheme();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
+
+  const isDashboard = pathname.startsWith('/dashboard');
+  const isDinerPath = pathname.startsWith('/tab');
+
+  const dinerHref = isDinerPath ? pathname : '/#diner';
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-topbar backdrop-blur-[14px] transition-colors duration-300">
@@ -42,59 +44,47 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <div className="flex items-center gap-3.5">
+        <div className="flex min-w-0 flex-1 items-center justify-center px-1 sm:px-4">
+          <SegmentedNav
+            items={[
+              { href: '/dashboard', label: 'Dashboard', active: isDashboard && !isDinerPath },
+              { href: dinerHref, label: 'Diner', active: isDinerPath },
+            ]}
+          />
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3.5">
           <button
             type="button"
             onClick={toggle}
-            className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border text-foreground transition-colors duration-200 hover:border-amber-soft-line hover:text-primary"
+            className="theme-toggle"
             aria-label="Toggle theme"
           >
-            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <ProtoSunIcon className="sun" />
+            <ProtoMoonIcon className="moon" />
           </button>
 
           {session ? (
-            <>
-              {navLinks.map(({ href, label, icon: Icon }) => {
-                const isActive = pathname === href || pathname.startsWith(`${href}/`);
-                return (
-                  <Link key={href} href={href}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`hidden gap-2 rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.18em] sm:inline-flex ${
-                        isActive
-                          ? 'bg-invert text-invert-foreground hover:bg-invert hover:text-invert-foreground'
-                          : 'text-muted-foreground hover:bg-scrim-3 hover:text-foreground'
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      {label}
-                    </Button>
-                  </Link>
-                );
-              })}
-
-              <div className="ml-1 flex items-center gap-3.5">
-                <div className="hidden items-center gap-2 sm:flex">
-                  <Avatar className="h-6 w-6">
-                    <AvatarFallback className="bg-gradient-to-br from-amber to-amber-deep text-[11px] font-medium text-primary-foreground">
-                      {session.user?.name?.[0]?.toUpperCase() ?? '?'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="max-w-[120px] truncate font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                    {session.user?.name}
-                  </span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => signOut({ callbackUrl: '/' })}
-                  className="rounded-full border-border px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors duration-200 hover:border-invert hover:bg-invert hover:text-invert-foreground"
-                >
-                  Sign Out
-                </Button>
+            <div className="ml-0 flex items-center gap-2 sm:gap-3.5 sm:ml-1">
+              <div className="hidden items-center gap-2 sm:flex">
+                <Avatar className="h-6 w-6">
+                  <AvatarFallback className="bg-gradient-to-br from-amber to-amber-deep text-[11px] font-medium text-primary-foreground">
+                    {session.user?.name?.[0]?.toUpperCase() ?? '?'}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="max-w-[120px] truncate font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                  {session.user?.name}
+                </span>
               </div>
-            </>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => signOut({ callbackUrl: '/' })}
+                className="signout rounded-full border-border px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors duration-200 hover:border-invert hover:bg-invert hover:text-invert-foreground sm:px-4"
+              >
+                Sign Out
+              </Button>
+            </div>
           ) : (
             <>
               <Link href="/auth/login">

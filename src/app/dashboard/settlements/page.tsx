@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Decimal from 'decimal.js';
 import type { SettlementAction, SettlementIssue, SettlementRow } from '@/lib/schemas/settlements';
+import { PageShell, PageHead, KpiStrip } from '@/components/pitch';
 
 const ISSUE_LABELS: Record<SettlementIssue, string> = {
   HOLD_FAILED:      'Hold declined',
@@ -105,40 +106,63 @@ export default function SettlementsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <p className="text-sm text-gray-400">Loading settlements...</p>
-      </div>
+      <PageShell>
+        <p className="py-24 text-center text-sm text-muted-foreground">Loading settlements...</p>
+      </PageShell>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Pending Settlements</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Payment issues that need manual resolution. All actions are permanent.
-        </p>
+    <PageShell>
+      <PageHead
+        title={<>Settlements</>}
+        subtitle={<>Every capture, every fee, every payout — issues that need manual resolution.</>}
+        actions={
+          <button
+            type="button"
+            className="rounded-full border border-border px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+          >
+            Export CSV
+          </button>
+        }
+      />
+
+      <KpiStrip
+        items={[
+          { label: 'Open issues', value: <em>{settlements.length}</em>, detail: 'Pending actions' },
+          { label: 'Captured today', value: '—', detail: 'TODO: ledger API', detailClass: 'wn' },
+          { label: 'Walkout fee', value: '—', detail: 'TODO' },
+          { label: 'Stripe fees', value: '—', detail: 'TODO' },
+        ]}
+      />
+
+      <div className="mt-40">
+        <div className="setl-row h">
+          <div>When</div>
+          <div>Table</div>
+          <div>Diner</div>
+          <div>Charged</div>
+          <div>Issue</div>
+          <div>Status</div>
+        </div>
       </div>
 
       {settlements.length === 0 ? (
-        <div className="text-center py-16 border border-gray-100 rounded-2xl bg-gray-50">
-          <p className="text-sm font-medium text-gray-900">All clear</p>
-          <p className="text-xs text-gray-400 mt-1">No pending payment issues.</p>
+        <div className="mt-8 rounded-[14px] border border-border bg-card py-16 text-center">
+          <p className="font-body font-medium text-foreground">All clear</p>
+          <p className="mt-1 text-sm text-muted-foreground">No pending payment issues.</p>
         </div>
       ) : (
         <div className="space-y-3">
           {settlements.map((row) => {
             const isActioning = actioning?.startsWith(row.id);
             return (
-              <div
-                key={row.id}
-                className="bg-white border border-gray-200 rounded-2xl overflow-hidden"
-              >
+              <div key={row.id} className="overflow-hidden rounded-[14px] border border-border bg-card">
                 {/* Row header */}
-                <div className="flex items-start justify-between px-5 pt-4 pb-3 border-b border-gray-100">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 pb-3 pt-4">
                   <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-gray-900">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-body text-sm font-medium text-foreground">
                         Table {row.tableNumber} — {row.dinerName}
                       </span>
                       <span
@@ -147,7 +171,7 @@ export default function SettlementsPage() {
                         {ISSUE_LABELS[row.issue]}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       {row.dinerEmail && <span>{row.dinerEmail}</span>}
                       <span>{elapsedLabel(row.occurredAt)}</span>
                       {row.holdAttempt > 0 && (
@@ -160,14 +184,14 @@ export default function SettlementsPage() {
                   </div>
 
                   {row.amountCents > 0 && (
-                    <span className="text-sm font-semibold text-gray-900 shrink-0 ml-4">
+                    <span className="shrink-0 font-mono text-sm font-medium text-primary">
                       ${new Decimal(row.amountCents).dividedBy(100).toFixed(2)}
                     </span>
                   )}
                 </div>
 
                 {/* Actions */}
-                <div className="px-5 py-3 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 px-5 py-3">
                   {row.availableActions.map((action) => {
                     const key = `${row.id}-${action}`;
                     return (
@@ -188,7 +212,6 @@ export default function SettlementsPage() {
         </div>
       )}
 
-      {/* Destructive action confirmation modal */}
       {confirmRow && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
@@ -219,6 +242,6 @@ export default function SettlementsPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

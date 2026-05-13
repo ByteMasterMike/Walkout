@@ -8,6 +8,8 @@ import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useIdleWarning } from '@/hooks/useIdleWarning';
 import IdleWarningToast from '@/components/IdleWarningToast';
 import { useSessionStream } from '@/hooks/useSessionStream';
+import { PhoneFrame } from '@/components/pitch';
+import { SearchGlyphIcon } from '@/components/icons/prototype';
 
 type MenuItemData = {
   id: string;
@@ -302,6 +304,20 @@ function TabPageInner() {
   const popularItems = allItems.filter((i) => i.isPopular && i.isAvailable);
 
   const activeOrders = orders.filter((o) => o.status !== 'CANCELLED');
+
+  const flowSteps = useMemo(
+    () => [
+      { n: '01', label: 'Tap NFC', active: holdStatus === 'NONE' || holdStatus === 'PENDING' },
+      { n: '02', label: 'Hold placed', active: holdStatus === 'HELD' },
+      { n: '03', label: 'Browse menu', active: holdStatus === 'HELD' },
+      { n: '04', label: 'Your tab', active: activeOrders.length > 0 },
+      { n: '05', label: 'Pay & leave', active: false },
+    ],
+    [holdStatus, activeOrders.length],
+  );
+
+  const menuRef = useRef<HTMLDivElement>(null);
+  const tabRef = useRef<HTMLDivElement>(null);
   const subtotal = activeOrders.reduce(
     (sum, o) => sum.plus(new Decimal(o.unitPrice).times(o.quantity)),
     new Decimal(0),
@@ -425,36 +441,64 @@ function TabPageInner() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-32">
-      <header className="sticky top-0 z-20 bg-white border-b border-gray-200 flex items-center justify-between px-4 h-14">
-        <div>
-          <p className="text-sm font-bold text-gray-900">{sessionRow.restaurantName}</p>
-          <p className="text-xs text-gray-400">Table {sessionRow.tableNumber}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowSearch((v) => !v)}
-          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
-          aria-label="Search menu"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-          </svg>
-        </button>
-      </header>
+    <>
+      <div className="min-h-screen bg-background">
+        <div className="diner-page mx-auto max-w-[1400px] px-4 pb-8 pt-4 lg:px-8">
+          <aside className="diner-rail hidden lg:block">
+            <div className="mono-am mb-2">N° 01 — The sequence</div>
+            <h2>
+              Your <em>tab</em>
+            </h2>
+            <p>Order from the menu, track your check, and leave when you&apos;re ready.</p>
+            <nav className="flow-nav" aria-label="Tab steps">
+              {flowSteps.map((s) => (
+                <button
+                  key={s.n}
+                  type="button"
+                  className={s.active ? 'on' : ''}
+                  onClick={() => {
+                    if (s.label === 'Browse menu') menuRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    if (s.label === 'Your tab') tabRef.current?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                >
+                  <span className="n">{s.n}</span>
+                  <span>{s.label}</span>
+                </button>
+              ))}
+            </nav>
+          </aside>
 
-      {showSearch && (
-        <div className="bg-white border-b border-gray-200 px-4 py-2">
-          <input
-            autoFocus
-            type="text"
-            placeholder="Search menu..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
-          />
-        </div>
-      )}
+          <PhoneFrame>
+            <header className="mb-3 flex items-center justify-between gap-3">
+              <div className="d-pill !max-w-[85%]">
+                <span className="dot" />
+                <span className="truncate">
+                  Table {sessionRow.tableNumber} · {sessionRow.restaurantName}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSearch((v) => !v)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--p-muted)] transition-colors hover:bg-white/5"
+                aria-label="Search menu"
+              >
+                <SearchGlyphIcon />
+              </button>
+            </header>
+
+            {showSearch && (
+              <div className="d-search mb-2">
+                <SearchGlyphIcon />
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Search menu..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="min-w-0 flex-1 border-0 bg-transparent font-body text-sm text-[var(--p-text)] placeholder:text-[var(--p-muted)] focus:outline-none"
+                />
+              </div>
+            )}
 
       {!bannerDismissed && (
         <div className="mx-4 mt-4 bg-gray-900 text-white rounded-xl p-4">
@@ -499,7 +543,7 @@ function TabPageInner() {
         </div>
       )}
 
-      <div className="px-4">
+      <div ref={menuRef}>
         {popularItems.length > 0 && (
           <div className="mt-6">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Featured</p>
@@ -608,8 +652,7 @@ function TabPageInner() {
           ))
         )}
 
-        <div className="mt-8">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">My Tab</p>
+        <div className="mt-8" ref={tabRef}>
           {activeOrders.length === 0 ? (
             <p className="text-sm text-gray-400 py-4 text-center">No items yet. Browse the menu above.</p>
           ) : (
@@ -712,6 +755,9 @@ function TabPageInner() {
           )}
         </div>
       </div>
+          </PhoneFrame>
+        </div>
+      </div>
 
       {sessionRow.status === 'OPEN' && !holdFailed && sessionId && (
         <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-gray-200 bg-white/95 backdrop-blur px-4 py-3 pb-safe">
@@ -802,7 +848,7 @@ function TabPageInner() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

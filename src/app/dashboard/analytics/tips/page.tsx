@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { PageShell, PageHead, KpiStrip } from '@/components/pitch';
 
 type PoolRow = {
   id: string;
@@ -150,9 +151,9 @@ export default function TipsAnalyticsPage() {
 
   if (loading || !data) {
     return (
-      <div className="px-4 py-16 text-center text-sm text-gray-400">
-        {loading ? 'Loading…' : 'No data'}
-      </div>
+      <PageShell>
+        <p className="py-16 text-center text-sm text-muted-foreground">{loading ? 'Loading…' : 'No data'}</p>
+      </PageShell>
     );
   }
 
@@ -160,72 +161,94 @@ export default function TipsAnalyticsPage() {
   const closedPools = data.pools.filter((p) => p.status === 'CLOSED');
   const donePools = data.pools.filter((p) => p.status === 'DISTRIBUTED');
 
+  const maxGross = Math.max(1, ...data.directRows.map((r) => r.grossCents));
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-xl font-bold text-gray-900 mb-1">Tip analytics</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Today&apos;s totals use your restaurant timezone ({data.timezone}).
-      </p>
+    <PageShell>
+      <PageHead
+        title={
+          <>
+            Tip <em>analytics</em>
+          </>
+        }
+        subtitle={<>Today&apos;s totals use your restaurant timezone ({data.timezone}).</>}
+        actions={
+          <div className="flex items-center gap-2">
+            <span className="mono text-muted-foreground">Mode</span>
+            <span className="codeline">{data.tipDistributionMode}</span>
+          </div>
+        }
+      />
 
       {error && (
-        <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+        <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
       )}
 
+      <KpiStrip
+        items={[
+          {
+            label: 'Tips (direct rows)',
+            value: formatMoney(data.directRows.reduce((s, r) => s + r.grossCents, 0)),
+            detail: `${data.directRows.length} servers`,
+          },
+          {
+            label: 'Highest',
+            value:
+              data.directRows.length > 0
+                ? formatMoney(Math.max(...data.directRows.map((r) => r.grossCents)))
+                : '—',
+            detail: 'Today',
+          },
+          { label: 'Pools open', value: String(openPools.length), detail: 'Shift totals' },
+          {
+            label: 'Mode',
+            value: <em>{data.tipDistributionMode}</em>,
+            detail: data.absorbTipProcessingFee ? 'Absorb fee on' : 'Absorb fee off',
+          },
+        ]}
+      />
+
       {data.tipDistributionMode === 'DIRECT' && (
-        <div className="mb-10">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900">Direct mode — today</h2>
+        <div className="mt-40">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="mono">By server · today</div>
             <button
               type="button"
               onClick={downloadDirectCsv}
-              className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50"
+              className="rounded-full border border-border px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
             >
               Download CSV
             </button>
           </div>
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase">
-                <tr>
-                  <th className="px-4 py-2">Server</th>
-                  {!data.absorbTipProcessingFee && (
-                    <>
-                      <th className="px-4 py-2 text-right">Gross</th>
-                      <th className="px-4 py-2 text-right">Fee</th>
-                      <th className="px-4 py-2 text-right">Net</th>
-                    </>
-                  )}
-                  {data.absorbTipProcessingFee && <th className="px-4 py-2 text-right">Tips</th>}
-                  <th className="px-4 py-2 text-right">Sessions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {data.directRows.map((r) => (
-                  <tr key={r.staffId ?? 'unattributed'} className="bg-white">
-                    <td className="px-4 py-2 font-medium text-gray-900">{r.staffName}</td>
-                    {!data.absorbTipProcessingFee && (
-                      <>
-                        <td className="px-4 py-2 text-right tabular-nums">{formatMoney(r.grossCents)}</td>
-                        <td className="px-4 py-2 text-right tabular-nums text-red-600">
-                          −{formatMoney(r.feeCents)}
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums font-medium">
-                          {formatMoney(r.netCents)}
-                        </td>
-                      </>
-                    )}
-                    {data.absorbTipProcessingFee && (
-                      <td className="px-4 py-2 text-right tabular-nums">{formatMoney(r.grossCents)}</td>
-                    )}
-                    <td className="px-4 py-2 text-right text-gray-600">{r.sessionCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {data.directRows.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-8">No captured tips yet today.</p>
-            )}
+          <div className="tip-list">
+            {data.directRows.map((r) => {
+              const pct = Math.round((r.grossCents / maxGross) * 100);
+              const initials = r.staffName
+                .split(/\s+/)
+                .map((w) => w[0])
+                .join('')
+                .slice(0, 2)
+                .toUpperCase();
+              return (
+                <div key={r.staffId ?? r.staffName} className="trow">
+                  <div className="av">{initials || '?'}</div>
+                  <div className="nm">{r.staffName}</div>
+                  <div className="bar">
+                    <span style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="amt">
+                    {!data.absorbTipProcessingFee ? formatMoney(r.netCents) : formatMoney(r.grossCents)}
+                  </div>
+                  <div className="cnt">{r.sessionCount} tabs</div>
+                </div>
+              );
+            })}
           </div>
+          {data.directRows.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">No captured tips yet today.</p>
+          )}
         </div>
       )}
 
@@ -308,6 +331,6 @@ export default function TipsAnalyticsPage() {
           )}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

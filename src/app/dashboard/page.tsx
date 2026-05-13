@@ -1,62 +1,179 @@
+import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
-import Link from 'next/link';
+import {
+  PageShell,
+  PageHead,
+  PageHeadMetaDot,
+  KpiStrip,
+  DashboardTile,
+  DashIdBar,
+} from '@/components/pitch';
+import {
+  TileCalIcon,
+  TileUsersIcon,
+  TileGridIcon,
+  TileChefIcon,
+  TileBellIcon,
+} from '@/components/icons/prototype';
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.restaurantId) redirect('/auth/login');
 
   const { role, restaurantId } = session.user;
+  const nameFirst = session.user.name?.split(/\s+/)[0] ?? 'there';
+
+  const now = new Date();
+  const dayLine = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+  const timeLine = now.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  const kpiItems = [
+    {
+      label: 'Tables active',
+      value: (
+        <>
+          <em>—</em>
+          <span className="c"> / —</span>
+        </>
+      ),
+      detail: 'TODO: wire aggregates API',
+    },
+    {
+      label: 'Revenue tonight',
+      value: '—',
+      detail: 'TODO',
+    },
+    {
+      label: 'Avg ticket',
+      value: '—',
+      detail: 'TODO',
+      detailClass: 'wn',
+    },
+    {
+      label: 'Open holds',
+      value: '—',
+      detail: 'TODO',
+    },
+  ];
+
+  const tiles: {
+    href: string;
+    corner: string;
+    icon: ReactNode;
+    title: string;
+    titleEm: string;
+    description: string;
+    roles: Array<'ADMIN' | 'MANAGER' | 'STAFF'>;
+  }[] = [
+    {
+      href: '/dashboard/setup',
+      corner: 'N° 01',
+      icon: <TileCalIcon />,
+      title: 'Table',
+      titleEm: 'setup',
+      description: 'Create tables and get NFC tag URLs.',
+      roles: ['ADMIN'],
+    },
+    {
+      href: '/dashboard/setup/staff',
+      corner: 'N° 02',
+      icon: <TileUsersIcon />,
+      title: 'Staff',
+      titleEm: 'management',
+      description: 'Invite team members and assign roles.',
+      roles: ['ADMIN'],
+    },
+    {
+      href: '/dashboard/floor',
+      corner: 'N° 03',
+      icon: <TileGridIcon />,
+      title: 'Floor',
+      titleEm: 'setup',
+      description: 'Assign servers to tables before service.',
+      roles: ['ADMIN', 'MANAGER'],
+    },
+    {
+      href: '/dashboard/tables',
+      corner: 'N° 04',
+      icon: <TileCalIcon />,
+      title: 'Live',
+      titleEm: 'tables',
+      description: 'Every tab in the room, in real time.',
+      roles: ['ADMIN', 'MANAGER', 'STAFF'],
+    },
+    {
+      href: '/dashboard/kitchen',
+      corner: 'N° 05',
+      icon: <TileChefIcon />,
+      title: 'Kitchen',
+      titleEm: 'display',
+      description: 'KDS — order queue for the kitchen.',
+      roles: ['ADMIN', 'MANAGER', 'STAFF'],
+    },
+    {
+      href: '/dashboard/requests',
+      corner: 'N° 06',
+      icon: <TileBellIcon />,
+      title: 'Service',
+      titleEm: 'requests',
+      description: 'Diner requests from the floor.',
+      roles: ['ADMIN', 'MANAGER', 'STAFF'],
+    },
+  ];
+
+  const dashboardRole =
+    role === 'ADMIN' || role === 'MANAGER' || role === 'STAFF' ? role : null;
+  const visibleTiles = dashboardRole
+    ? tiles.filter((t) => t.roles.includes(dashboardRole))
+    : [];
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10 md:px-8">
-      <header className="mb-10 border-b border-border pb-6">
-        <h1 className="font-display text-4xl font-light tracking-[-0.035em] text-foreground md:text-5xl">
-          Dashboard
-        </h1>
-        <p className="mt-3 max-w-xl font-body text-lg text-muted-foreground">
-          Welcome back, {session.user.name} · <span className="text-foreground">{role}</span>
-        </p>
-      </header>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {role === 'ADMIN' && (
+    <PageShell>
+      <PageHead
+        title={
           <>
-            <DashLink href="/dashboard/setup" label="Table Setup" description="Create tables and get NFC tag URLs" />
-            <DashLink href="/dashboard/setup/staff" label="Staff Management" description="Invite and manage staff accounts" />
+            Welcome back, <em>{nameFirst}.</em>
           </>
-        )}
-        {(role === 'ADMIN' || role === 'MANAGER') && (
-          <DashLink href="/dashboard/floor" label="Floor Setup" description="Assign servers to tables" />
-        )}
-        <DashLink href="/dashboard/tables" label="Live Tables" description="View table status in real time" />
-        <DashLink href="/dashboard/kitchen" label="Kitchen Display" description="KDS — order queue for the kitchen" />
-        <DashLink href="/dashboard/requests" label="Service Requests" description="Diner requests from the floor" />
+        }
+        subtitle={
+          <>
+            {dayLine} · signed in as {role}. Operational KPIs below are placeholders until an
+            aggregates API exists.
+          </>
+        }
+        meta={
+          <>
+            <PageHeadMetaDot />
+            Live · {timeLine}
+          </>
+        }
+      />
+
+      <KpiStrip items={kpiItems} />
+
+      <div className="tiles mt-40">
+        {visibleTiles.map((t) => (
+          <DashboardTile
+            key={t.href}
+            href={t.href}
+            corner={t.corner}
+            icon={t.icon}
+            title={t.title}
+            titleEm={t.titleEm}
+            description={t.description}
+          />
+        ))}
       </div>
 
-      <p className="mt-10 font-mono text-[11px] text-muted-foreground">
-        Restaurant ID: <span className="text-amber-deep">{restaurantId}</span>
-      </p>
-    </div>
-  );
-}
-
-function DashLink({
-  href,
-  label,
-  description,
-}: {
-  href: string;
-  label: string;
-  description: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group block rounded-[14px] border border-border bg-card p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-soft-line hover:shadow-md"
-    >
-      <p className="font-display text-[22px] font-light tracking-[-0.02em] text-card-foreground">{label}</p>
-      <p className="mt-2 font-body text-[15px] leading-snug text-muted-foreground">{description}</p>
-    </Link>
+      <DashIdBar id={restaurantId} />
+    </PageShell>
   );
 }

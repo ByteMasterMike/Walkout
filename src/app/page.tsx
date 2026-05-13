@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, useInView } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { PhoneFrame } from '@/components/pitch';
 
 /* ═══════════════════════════════════════════════════════════════
    HELPERS
@@ -178,7 +179,7 @@ function DinerSection() {
   }, []);
 
   return (
-    <section className="border-t border-border px-6 py-28 md:px-10">
+    <section id="diner" className="border-t border-border px-6 py-28 md:px-14">
       <Reveal>
         <div className="mb-16">
           <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-primary">No. 01 — The diner</span>
@@ -203,101 +204,179 @@ function DinerSection() {
 
         <div className="flex justify-center lg:col-span-4">
           <Reveal>
-            <div className="relative w-[280px] rounded-[40px] border border-border/30 bg-ink p-2 shadow-2xl md:w-[320px]">
-              <div className="absolute left-1/2 top-3 h-6 w-24 -translate-x-1/2 rounded-full bg-black" />
-              <div className="relative min-h-[560px] overflow-hidden rounded-[32px] bg-ink-2 p-6 pt-14">
-                {active === 0 && (
-                  <motion.div key="s1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center">
-                    <div className="relative mt-8 flex h-28 w-28 items-center justify-center">
-                      <div className="absolute inset-0 animate-ping rounded-full border border-primary/40" />
-                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-amber-light to-amber-deep shadow-lg">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 8v-1a2 2 0 012-2h1M4 16v1a2 2 0 002 2h1M20 8v-1a2 2 0 00-2-2h-1M20 16v1a2 2 0 01-2 2h-1M8 12c0-2 1.5-3 4-3s4 1 4 3-1.5 3-4 3-4-1-4-3z" stroke="#0a0908" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                      </div>
+            <PhoneFrame className="mx-auto" responsive>
+              {active === 0 && (
+                <motion.div
+                  key="s1"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="tab-screen-surface flex flex-1 flex-col items-center text-center"
+                >
+                  <div className="nfc" aria-hidden>
+                    <div className="nfc-core">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <path
+                          d="M4 8v-1a2 2 0 012-2h1M4 16v1a2 2 0 002 2h1M20 8v-1a2 2 0 00-2-2h-1M20 16v1a2 2 0 01-2 2h-1M8 12c0-2 1.5-3 4-3s4 1 4 3-1.5 3-4 3-4-1-4-3z"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                        />
+                      </svg>
                     </div>
-                    <p className="mt-8 font-display text-4xl font-light leading-[0.95]">Welcome,<br /><em className="italic text-primary">Michael.</em></p>
-                    <p className="mt-3 font-body text-sm italic text-muted-foreground">Hold of $75 placed · Visa ····4242</p>
-                  </motion.div>
-                )}
-                {active === 1 && (
-                  <motion.div key="s2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-3">
-                    <span className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.22em] text-primary">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Table 7 · Menu
+                  </div>
+                  <h2 className="d-h">
+                    Welcome,
+                    <br />
+                    <em>Michael.</em>
+                  </h2>
+                  <p className="d-sub">Hold of $75 placed · Visa ····4242</p>
+                </motion.div>
+              )}
+              {active === 1 && (
+                <motion.div
+                  key="s2"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="tab-screen-surface flex min-h-0 flex-1 flex-col"
+                >
+                  <span className="d-pill">
+                    <span className="dot" aria-hidden />
+                    Table 7 · Menu
+                  </span>
+                  <div className="d-cats">
+                    <span className="d-cat on" tabIndex={-1}>
+                      Mains
                     </span>
-                    <div className="mt-2 flex gap-2">
-                      <span className="rounded-full bg-primary px-3 py-1 font-mono text-[9px] text-ink">Mains</span>
-                      <span className="rounded-full border border-border px-3 py-1 font-mono text-[9px] text-muted-foreground">Starters</span>
-                      <span className="rounded-full border border-border px-3 py-1 font-mono text-[9px] text-muted-foreground">Bar</span>
-                    </div>
-                    {[{ n: 'NY Strip Steak', p: '$38', d: '14oz, dry aged, rosemary butter' }, { n: 'Grilled Salmon', p: '$29', d: 'Atlantic, lemon beurre blanc' }, { n: 'Cacio e Pepe', p: '$24', d: 'Tonnarelli, pecorino romano' }].map((item) => (
-                      <div key={item.n} className="rounded-xl border border-border/50 bg-ink-3/50 p-3">
-                        <div className="flex justify-between"><span className="font-display text-base italic">{item.n}</span><span className="font-mono text-xs text-primary">{item.p}</span></div>
-                        <p className="mt-1 font-body text-xs italic text-muted-foreground">{item.d}</p>
+                    <span className="d-cat" tabIndex={-1}>
+                      Starters
+                    </span>
+                    <span className="d-cat" tabIndex={-1}>
+                      Bar
+                    </span>
+                  </div>
+                  <div className="d-list">
+                    {[
+                      { n: 'NY Strip Steak', pr: '38', d: '14oz, dry aged, rosemary butter' },
+                      { n: 'Grilled Salmon', pr: '29', d: 'Atlantic, lemon beurre blanc' },
+                      { n: 'Cacio e Pepe', pr: '24', d: 'Tonnarelli, pecorino romano' },
+                    ].map((item) => (
+                      <div key={item.n} className="d-item" role="presentation">
+                        <div className="b">
+                          <div className="top">
+                            <span className="nm">{item.n}</span>
+                            <span className="pr">{item.pr}</span>
+                          </div>
+                          <p className="dsc">{item.d}</p>
+                        </div>
                       </div>
                     ))}
-                  </motion.div>
-                )}
-                {active === 2 && (
-                  <motion.div key="s3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col">
-                    <span className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.22em] text-primary">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Table 7 · Ordering
-                    </span>
-                    <p className="mt-4 font-display text-3xl font-light">Your tab.</p>
-                    <div className="mt-4 flex flex-col gap-2">
-                      {[{ n: 'NY Strip Steak', q: '×1', p: '$38' }, { n: 'Caesar Salad', q: '×1', p: '$14' }, { n: 'Old Fashioned', q: '×2', p: '$30' }, { n: 'Truffle Fries', q: '×1', p: '$9' }].map((item) => (
-                        <div key={item.n} className="flex items-center justify-between border-b border-border/30 py-2">
-                          <div className="flex items-baseline gap-2"><span className="font-body text-sm">{item.n}</span><span className="font-mono text-[10px] text-muted-foreground">{item.q}</span></div>
-                          <span className="font-mono text-xs text-primary">{item.p}</span>
+                  </div>
+                </motion.div>
+              )}
+              {active === 2 && (
+                <motion.div
+                  key="s3"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="tab-screen-surface flex min-h-0 flex-1 flex-col"
+                >
+                  <span className="d-pill">
+                    <span className="dot" aria-hidden />
+                    Table 7 · Ordering
+                  </span>
+                  <p className="d-h mt-2 !text-[28px] !leading-tight">Your tab.</p>
+                  <div className="d-cart">
+                    {[
+                      { n: 'NY Strip Steak', q: '×1', pr: '38' },
+                      { n: 'Caesar Salad', q: '×1', pr: '14' },
+                      { n: 'Old Fashioned', q: '×2', pr: '30' },
+                      { n: 'Truffle Fries', q: '×1', pr: '9' },
+                    ].map((item) => (
+                      <div key={item.n} className="d-citem">
+                        <div className="flex items-baseline gap-2">
+                          <span className="nm">{item.n}</span>
+                          <span className="q">{item.q}</span>
                         </div>
-                      ))}
-                    </div>
-                    <div className="mt-auto pt-4 border-t border-primary/30">
-                      <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground">Running total</span>
-                      <p className="font-display text-4xl font-light">$91<span className="text-muted-foreground">.00</span></p>
-                    </div>
-                  </motion.div>
-                )}
-                {active === 3 && (
-                  <motion.div key="s4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center text-center">
-                    <svg className="mt-6" width="72" height="72" viewBox="0 0 72 72" fill="none"><circle cx="36" cy="36" r="34" stroke="#e89c4c" strokeWidth="1.5" /><path d="M22 37 L32 47 L52 27" stroke="#e89c4c" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                    <p className="mt-6 font-display text-4xl font-light">You're <em className="italic text-primary">out.</em></p>
-                    <p className="mt-2 font-body text-sm italic text-muted-foreground">Captured · Receipt emailed · Hold released</p>
-                    <div className="mt-6 w-full text-left">
-                      {[['Subtotal', '$91.00'], ['PA Tax 6%', '$5.46'], ['Service fee', '$0.46']].map(([l, v]) => (
-                        <div key={l} className="flex justify-between border-b border-border/30 py-2 font-mono text-xs">
-                          <span className="italic text-muted-foreground">{l}</span><span>{v}</span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between pt-3 font-mono text-sm text-primary">
-                        <span className="italic">Charged</span><span>$96.92</span>
+                        <span className="pr">{item.pr}</span>
                       </div>
+                    ))}
+                  </div>
+                  <div className="d-total">
+                    <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--p-muted)]">Running total</span>
+                    <p className="big">
+                      91<span className="c">.00</span>
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+              {active === 3 && (
+                <motion.div
+                  key="s4"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="tab-screen-surface flex flex-1 flex-col items-center text-center"
+                >
+                  <svg className="mt-2 shrink-0" width="72" height="72" viewBox="0 0 72 72" fill="none" aria-hidden>
+                    <circle cx="36" cy="36" r="34" stroke="#e89c4c" strokeWidth="1.5" />
+                    <path
+                      d="M22 37 L32 47 L52 27"
+                      stroke="#e89c4c"
+                      strokeWidth="2.2"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <h2 className="d-h mt-4">
+                    You&apos;re <em>out.</em>
+                  </h2>
+                  <p className="d-sub">Captured · Receipt emailed · Hold released</p>
+                  <div className="mt-6 w-full text-left">
+                    {[
+                      ['Subtotal', '$91.00'],
+                      ['PA Tax 6%', '$5.46'],
+                      ['Service fee', '$0.46'],
+                    ].map(([l, v]) => (
+                      <div key={l} className="d-row">
+                        <span>{l}</span>
+                        <span>{v}</span>
+                      </div>
+                    ))}
+                    <div className="mt-2 flex justify-between border-t border-[rgba(232,156,76,0.3)] pt-3 font-mono text-sm text-[hsl(32_78%_60%)]">
+                      <span className="italic">Charged</span>
+                      <span>$96.92</span>
                     </div>
-                  </motion.div>
-                )}
-              </div>
-              <div className="absolute bottom-3 left-1/2 h-1 w-24 -translate-x-1/2 rounded-full bg-paper/50" />
-            </div>
+                  </div>
+                </motion.div>
+              )}
+            </PhoneFrame>
           </Reveal>
         </div>
 
-        <div className="flex flex-col gap-1 border-l border-border pl-8 lg:col-span-4">
+        <nav className="flow-nav border-l border-border pl-8 lg:col-span-4" aria-label="Diner experience steps">
           {chapters.map((ch, i) => (
             <button
               key={ch.num}
+              type="button"
               onClick={() => setActive(i)}
-              className={`flex gap-5 py-5 text-left transition-all ${active === i ? '' : 'opacity-50'}`}
+              className={active === i ? 'on' : 'opacity-55 hover:opacity-90'}
             >
-              <span className={`font-mono text-xs ${active === i ? 'text-primary' : 'text-muted-foreground'}`}>{ch.num}</span>
-              <div>
-                <h4 className={`font-display text-2xl font-light tracking-[-0.02em] ${active === i ? 'text-foreground' : 'text-muted-foreground'}`}>
+              <span className="n">{ch.num}</span>
+              <span className="flex min-w-0 flex-col gap-1">
+                <span className="font-display text-xl font-light tracking-[-0.02em]">
                   <em className="italic">{ch.title}</em>
-                </h4>
-                <p className={`mt-1 font-body text-sm italic text-muted-foreground transition-all ${active === i ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+                </span>
+                <span
+                  className={`font-body text-sm italic text-muted-foreground transition-all ${
+                    active === i ? 'max-h-24 opacity-100' : 'max-h-0 overflow-hidden opacity-0'
+                  }`}
+                >
                   {ch.desc}
-                </p>
-              </div>
+                </span>
+              </span>
             </button>
           ))}
-        </div>
+        </nav>
       </div>
     </section>
   );
@@ -566,7 +645,7 @@ function Footer() {
 
 export default function HomePage() {
   return (
-    <main>
+    <main className="mx-auto max-w-[1600px]">
       <div className="grain" />
       <Hero />
       <Ticker />
