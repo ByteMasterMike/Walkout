@@ -45,15 +45,15 @@ function formatCents(cents: number): string {
 }
 
 const STATUS_RING: Record<TableStatus, string> = {
-  AVAILABLE: 'ring-green-400',
-  OCCUPIED: 'ring-amber-400',
-  CLOSING: 'ring-red-400',
+  AVAILABLE: 'ring-moss/50',
+  OCCUPIED: 'ring-primary/50',
+  CLOSING: 'ring-blood/50',
 };
 
 const STATUS_BG: Record<TableStatus, string> = {
-  AVAILABLE: 'bg-green-50',
-  OCCUPIED: 'bg-amber-50',
-  CLOSING: 'bg-red-50',
+  AVAILABLE: 'bg-card border-moss/30 hover:border-moss/50',
+  OCCUPIED: 'bg-amber-soft border-amber-soft-line hover:border-primary/50',
+  CLOSING: 'bg-destructive/10 border-destructive/40 hover:border-destructive/60',
 };
 
 const STATUS_LABEL: Record<TableStatus, string> = {
@@ -122,23 +122,25 @@ export default function TablesPage() {
   }
 
   return (
-    <div className="px-4 py-8">
-      <div className="flex items-center justify-between mb-6 max-w-4xl mx-auto">
+    <div className="mx-auto max-w-5xl px-4 py-8 md:px-8">
+      <div className="mb-6 flex max-w-4xl items-end justify-between gap-4 border-b border-border pb-6 mx-auto">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Live Tables</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="font-display text-3xl font-light tracking-[-0.03em] text-foreground md:text-4xl">
+            Live Tables
+          </h1>
+          <p className="mt-2 font-body text-muted-foreground">
             {occupied} of {tables.length} tables occupied
           </p>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-gray-400">
-          <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+        <div className="flex items-center gap-2 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
           <span>Live</span>
         </div>
       </div>
 
       {showCashBanner && (
-        <div className="max-w-4xl mx-auto mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex flex-wrap items-start justify-between gap-3">
-          <p className="text-sm text-amber-950">
+        <div className="mx-auto mb-4 flex max-w-4xl flex-wrap items-start justify-between gap-3 rounded-[14px] border border-amber-soft-line bg-amber-soft px-4 py-3">
+          <p className="text-sm text-foreground">
             <span className="font-semibold">Cash payment — collect cash on the floor.</span>{' '}
             Tables:{' '}
             {cashAlertTables.map((t) => t.tableNumber).join(', ')}. Open each table to mark cash
@@ -147,7 +149,7 @@ export default function TablesPage() {
           <button
             type="button"
             onClick={dismissCashBanner}
-            className="text-xs shrink-0 px-2 py-1 rounded-lg border border-amber-300 hover:bg-amber-100"
+            className="shrink-0 rounded-lg border border-amber-soft-line px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-foreground transition-colors hover:bg-primary/20"
           >
             Dismiss
           </button>
@@ -155,9 +157,9 @@ export default function TablesPage() {
       )}
 
       {loading ? (
-        <p className="text-sm text-gray-400 text-center py-16">Loading tables...</p>
+        <p className="py-16 text-center font-body text-muted-foreground">Loading tables...</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 max-w-4xl mx-auto">
+        <div className="mx-auto grid max-w-5xl grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4">
           {tables.map((table) => (
             <TableCard key={table.id} table={table} />
           ))}
@@ -173,19 +175,21 @@ function TableCard({ table }: { table: LiveTable }) {
   return (
     <Link
       href={`/dashboard/tables/${table.id}`}
-      className={`block rounded-2xl border-2 p-4 transition-all hover:shadow-md ${STATUS_BG[table.status]} ring-2 ${STATUS_RING[table.status]}`}
+      className={`block min-h-[140px] rounded-[14px] border-2 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${STATUS_BG[table.status]} ring-2 ${STATUS_RING[table.status]}`}
     >
-      <div className="flex items-start justify-between mb-2">
-        <span className="text-lg font-bold text-gray-900">{table.tableNumber}</span>
+      <div className="mb-3 flex items-start justify-between">
+        <span className="font-display text-[30px] font-light leading-none tracking-[-0.02em] text-foreground">
+          {table.tableNumber}
+        </span>
         <div className="flex flex-col items-end gap-1">
           {table.hasOpenServiceRequest && (
-            <span className="w-2 h-2 rounded-full bg-blue-500" title="Open service request" />
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" title="Open service request" />
           )}
           {table.hasFailedHold && (
-            <span className="w-2 h-2 rounded-full bg-orange-500" title="Failed hold" />
+            <span className="h-1.5 w-1.5 rounded-full bg-destructive" title="Failed hold" />
           )}
           {table.hasCashParticipant && (
-            <span className="text-xs text-gray-500" title="Cash payment">
+            <span className="font-mono text-[10px] text-muted-foreground" title="Cash payment">
               $
             </span>
           )}
@@ -193,27 +197,29 @@ function TableCard({ table }: { table: LiveTable }) {
       </div>
 
       {table.status === 'AVAILABLE' ? (
-        <p className="text-xs text-green-700 font-medium">{STATUS_LABEL[table.status]}</p>
+        <p className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-moss">{STATUS_LABEL[table.status]}</p>
       ) : (
         <>
-          <p className="text-xs font-medium text-gray-900">{STATUS_LABEL[table.status]}</p>
-          <p className="text-xs text-gray-500 mt-1">
-            {table.coverCount} {table.coverCount === 1 ? 'cover' : 'covers'} &middot; {elapsed}
+          <p className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-primary">{STATUS_LABEL[table.status]}</p>
+          <p className="mt-1 font-body text-sm text-muted-foreground">
+            {table.coverCount} {table.coverCount === 1 ? 'cover' : 'covers'} · {elapsed}
           </p>
-          <p className="text-sm font-semibold text-gray-900 mt-1">{formatCents(table.runningTotalCents)}</p>
+          <p className="mt-1 font-display text-[22px] font-light text-primary">{formatCents(table.runningTotalCents)}</p>
         </>
       )}
 
       <div className="mt-2">
         {table.assignedServerName ? (
-          <p className="text-xs text-gray-500 truncate">{table.assignedServerName}</p>
+          <p className="truncate font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
+            {table.assignedServerName}
+          </p>
         ) : table.status !== 'AVAILABLE' ? (
-          <p className="text-xs text-yellow-600 font-medium">Unassigned</p>
+          <p className="text-sm font-medium text-primary">Unassigned</p>
         ) : null}
       </div>
 
       {table.hasFailedHold && (
-        <p className="text-xs text-orange-700 mt-1 font-medium">Card declined</p>
+        <p className="mt-2 text-xs font-medium text-destructive">Card declined</p>
       )}
     </Link>
   );

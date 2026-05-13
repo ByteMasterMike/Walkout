@@ -39,8 +39,18 @@
 
     --font-mono:           'JetBrains Mono', 'DM Mono', ui-monospace, monospace;
     --font-display:        'Fraunces', Georgia, serif;
-    --font-body:           'Instrument Serif', Georgia, serif;
+    /* --font-body set by next/font in layout */
     --font-sans:           'Inter', system-ui, sans-serif;
+
+    /* Semantic surfaces (HTML prototype alignment) */
+    --topbar-bg: color-mix(in hsl, hsl(var(--background)) 88%, transparent);
+    --scrim-1: color-mix(in hsl, hsl(var(--foreground)) 2%, hsl(var(--background)));
+    --scrim-2: color-mix(in hsl, hsl(var(--foreground)) 3%, hsl(var(--background)));
+    --scrim-3: color-mix(in hsl, hsl(var(--foreground)) 4%, hsl(var(--background)));
+    --amber-soft-bg: color-mix(in hsl, hsl(var(--primary)) 8%, hsl(var(--background)));
+    --amber-soft-line: color-mix(in hsl, hsl(var(--primary)) 32%, transparent);
+    --invert-bg:           30 10% 4%;
+    --invert-fg:           39 30% 92%;
   }
 
   .dark {
@@ -71,6 +81,15 @@
     --border:              30 12% 14%;
     --input:               30 12% 16%;
     --ring:                32 78% 60%;
+
+    --topbar-bg: color-mix(in hsl, hsl(var(--background)) 85%, transparent);
+    --scrim-1: color-mix(in hsl, hsl(var(--foreground)) 2%, hsl(var(--background)));
+    --scrim-2: color-mix(in hsl, hsl(var(--foreground)) 3%, hsl(var(--background)));
+    --scrim-3: color-mix(in hsl, hsl(var(--foreground)) 4%, hsl(var(--background)));
+    --amber-soft-bg: color-mix(in hsl, hsl(var(--primary)) 8%, hsl(var(--background)));
+    --amber-soft-line: color-mix(in hsl, hsl(var(--primary)) 32%, transparent);
+    --invert-bg:           39 30% 92%;
+    --invert-fg:           30 10% 4%;
   }
 }
 
@@ -82,8 +101,9 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground font-body antialiased text-[17px] leading-[1.4];
     font-feature-settings: "rlig" 1, "calt" 1;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
   a {
     @apply text-primary hover:text-primary/80 transition-colors;
@@ -99,9 +119,19 @@
   inset: 0;
   pointer-events: none;
   z-index: 1000;
-  opacity: 0.035;
+  opacity: 0.04;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PScwIDAgMjAwIDIwMCcgeG1sbnM9J2h0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnJz48ZmlsdGVyIGlkPSduJz48ZmVUdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9JzAuOScgbnVtT2N0YXZlcz0nMycvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPScxMDAlJyBoZWlnaHQ9JzEwMCUnIGZpbHRlcj0ndXJsKCNuKScvPjwvc3ZnPg==");
+}
+
+.dark .grain {
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+}
+
+/* Main column amber wash (dashboard shell) */
+.dashboard-main-wash {
+  background-image: radial-gradient(1200px 600px at 50% -200px, hsl(var(--primary) / 0.06), transparent 70%);
 }
 
 /* ═══════════════════════════════════════════════════════════════

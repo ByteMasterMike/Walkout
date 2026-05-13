@@ -72,6 +72,20 @@ const config: Config = {
           DEFAULT: '#5b7a4a',
           foreground: '#fff',
         },
+        topbar: 'var(--topbar-bg)',
+        scrim: {
+          1: 'var(--scrim-1)',
+          2: 'var(--scrim-2)',
+          3: 'var(--scrim-3)',
+        },
+        'amber-soft': {
+          DEFAULT: 'var(--amber-soft-bg)',
+          line: 'var(--amber-soft-line)',
+        },
+        invert: {
+          DEFAULT: 'hsl(var(--invert-bg))',
+          foreground: 'hsl(var(--invert-fg))',
+        },
       },
       borderRadius: {
         lg:   'var(--radius)',

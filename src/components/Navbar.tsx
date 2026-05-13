@@ -3,8 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { motion, useScroll, useMotionValueEvent } from 'framer-motion';
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { LayoutDashboard, Sun, Moon } from 'lucide-react';
@@ -33,76 +31,57 @@ export default function Navbar() {
   const { data: session } = useSession();
   const { theme, toggle } = useTheme();
   const pathname = usePathname();
-  const { scrollY } = useScroll();
-  const [scrolled, setScrolled] = useState(false);
-
-  useMotionValueEvent(scrollY, 'change', (y) => {
-    setScrolled(y > 8);
-  });
 
   return (
-    <motion.nav
-      className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl"
-      animate={{ borderBottomWidth: scrolled ? 1 : 0 }}
-      transition={{ duration: 0.2 }}
-      style={{ borderBottomColor: 'hsl(var(--border))' }}
-    >
-      <div className="container flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5 no-underline hover:no-underline group">
-          <ChevronLogo className="h-5 w-8" />
-          <span className="font-display text-[1.15rem] font-light italic tracking-tight text-foreground">
+    <nav className="sticky top-0 z-50 border-b border-border bg-topbar backdrop-blur-[14px] transition-colors duration-300">
+      <div className="mx-auto flex h-[65px] w-full max-w-[1600px] items-center justify-between gap-4 px-8">
+        <Link href="/" className="group flex items-center gap-2.5 no-underline hover:no-underline">
+          <ChevronLogo className="h-5 w-[30px] shrink-0" />
+          <span className="font-display text-[22px] font-normal italic leading-none tracking-tight text-foreground">
             walkout
           </span>
         </Link>
 
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
+        <div className="flex items-center gap-3.5">
+          <button
+            type="button"
             onClick={toggle}
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            aria-label="Toggle dark mode"
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border text-foreground transition-colors duration-200 hover:border-amber-soft-line hover:text-primary"
+            aria-label="Toggle theme"
           >
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
+          </button>
 
           {session ? (
             <>
               {navLinks.map(({ href, label, icon: Icon }) => {
-                const isActive = pathname === href || pathname.startsWith(href + '/');
+                const isActive = pathname === href || pathname.startsWith(`${href}/`);
                 return (
-                  <Link key={href} href={href} className="relative">
+                  <Link key={href} href={href}>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className={`gap-1.5 transition-colors ${
+                      className={`hidden gap-2 rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.18em] sm:inline-flex ${
                         isActive
-                          ? 'text-foreground'
-                          : 'text-muted-foreground hover:text-foreground'
+                          ? 'bg-invert text-invert-foreground hover:bg-invert hover:text-invert-foreground'
+                          : 'text-muted-foreground hover:bg-scrim-3 hover:text-foreground'
                       }`}
                     >
                       <Icon className="h-3.5 w-3.5" />
                       {label}
                     </Button>
-                    {isActive && (
-                      <motion.div
-                        layoutId="nav-indicator"
-                        className="absolute -bottom-[17px] left-2 right-2 h-[2px] rounded-full bg-primary"
-                        transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                      />
-                    )}
                   </Link>
                 );
               })}
 
-              <div className="ml-2 flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-7 w-7">
-                    <AvatarFallback className="text-xs">
+              <div className="ml-1 flex items-center gap-3.5">
+                <div className="hidden items-center gap-2 sm:flex">
+                  <Avatar className="h-6 w-6">
+                    <AvatarFallback className="bg-gradient-to-br from-amber to-amber-deep text-[11px] font-medium text-primary-foreground">
                       {session.user?.name?.[0]?.toUpperCase() ?? '?'}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="hidden text-xs font-medium text-muted-foreground sm:block">
+                  <span className="max-w-[120px] truncate font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                     {session.user?.name}
                   </span>
                 </div>
@@ -110,7 +89,7 @@ export default function Navbar() {
                   variant="outline"
                   size="sm"
                   onClick={() => signOut({ callbackUrl: '/' })}
-                  className="text-xs"
+                  className="rounded-full border-border px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors duration-200 hover:border-invert hover:bg-invert hover:text-invert-foreground"
                 >
                   Sign Out
                 </Button>
@@ -119,17 +98,26 @@ export default function Navbar() {
           ) : (
             <>
               <Link href="/auth/login">
-                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground hover:bg-scrim-3 hover:text-foreground"
+                >
                   Sign In
                 </Button>
               </Link>
               <Link href="/auth/register">
-                <Button size="sm">Get Started</Button>
+                <Button
+                  size="sm"
+                  className="rounded-full bg-primary px-5 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-primary-foreground shadow-none hover:bg-amber-light"
+                >
+                  Get Started
+                </Button>
               </Link>
             </>
           )}
         </div>
       </div>
-    </motion.nav>
+    </nav>
   );
 }

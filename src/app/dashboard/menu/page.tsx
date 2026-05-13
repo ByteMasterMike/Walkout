@@ -166,14 +166,14 @@ export default function MenuPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-xl font-bold text-gray-900 mb-1">Menu</h1>
-      <p className="text-sm text-gray-500 mb-8">
+    <div className="mx-auto max-w-3xl px-4 py-10 md:px-6">
+      <h1 className="mb-1 font-display text-3xl font-light tracking-[-0.03em] text-foreground">Menu</h1>
+      <p className="mb-8 font-body text-muted-foreground">
         Manage categories and items. Tap the toggle to 86 an item from the menu instantly.
       </p>
 
       {/* Add category */}
-      <form onSubmit={handleAddCategory} className="flex gap-3 mb-8">
+      <form onSubmit={handleAddCategory} className="mb-8 flex gap-3">
         <input
           type="text"
           required
@@ -181,92 +181,87 @@ export default function MenuPage() {
           placeholder="New category name (e.g. Starters)"
           value={newCatName}
           onChange={(e) => setNewCatName(e.target.value)}
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+          className="min-h-[44px] flex-1 rounded-[10px] border border-border bg-scrim-2 px-4 py-2 font-body text-[17px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         />
         <button
           type="submit"
           disabled={addingCat}
-          className="px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors"
+          className="rounded-full bg-primary px-5 font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-primary-foreground transition-colors hover:bg-amber-light disabled:opacity-50"
         >
           {addingCat ? 'Adding...' : 'Add category'}
         </button>
       </form>
       {catError && (
-        <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {catError}
         </p>
       )}
 
       {loading ? (
-        <p className="text-sm text-gray-400 text-center py-10">Loading menu...</p>
+        <p className="py-10 text-center font-body text-muted-foreground">Loading menu...</p>
       ) : categories.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-10">
+        <p className="py-10 text-center font-body text-muted-foreground">
           No categories yet. Add one above to start building your menu.
         </p>
       ) : (
         <div className="space-y-6">
           {categories.map((cat) => (
-            <div key={cat.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                <p className="text-sm font-semibold text-gray-900">{cat.name}</p>
+            <div key={cat.id} className="overflow-hidden rounded-[14px] border border-border bg-card">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <p className="font-display text-[22px] font-light text-foreground">{cat.name}</p>
                 <button
+                  type="button"
                   onClick={() => openAddItem(cat.id)}
-                  className="text-xs px-3 py-1.5 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                  className="rounded-full bg-invert px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-invert-foreground transition-opacity hover:opacity-90"
                 >
                   Add item
                 </button>
               </div>
 
               {cat.items.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-6">
+                <p className="py-6 text-center font-body text-sm text-muted-foreground">
                   No items yet. Add one to this category.
                 </p>
               ) : (
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-border">
                   {cat.items.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3 px-4 py-3">
-                      {/* Photo thumbnail */}
-                      <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden">
+                    <div key={item.id} className="flex items-center gap-4 px-4 py-4">
+                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[10px] bg-scrim-2">
                         {item.imageUrl && (
-                          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
                         )}
                       </div>
-
-                      {/* Item info */}
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                          <p className="truncate font-display text-[22px] font-light text-foreground">{item.name}</p>
                           {item.isPopular && (
-                            <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                            <span className="rounded-full border border-amber-soft-line bg-amber-soft px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-primary">
                               Featured
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">${item.price}</p>
+                        <p className="mt-0.5 font-mono text-sm text-primary">${item.price}</p>
                         {item.allergens.length > 0 && (
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {item.allergens.join(', ')}
-                          </p>
+                          <p className="mt-0.5 font-body text-xs text-muted-foreground">{item.allergens.join(', ')}</p>
                         )}
                       </div>
-
-                      {/* 86 toggle */}
-                      <div className="shrink-0 flex flex-col items-end gap-1">
+                      <div className="flex shrink-0 flex-col items-end gap-1">
                         <button
+                          type="button"
                           onClick={() => toggleAvailable(cat.id, item.id, item.isAvailable)}
-                          className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
-                            item.isAvailable ? 'bg-gray-900' : 'bg-gray-200'
+                          className={`relative inline-flex h-6 w-11 rounded-full border border-border transition-colors ${
+                            item.isAvailable ? 'bg-primary' : 'bg-scrim-3'
                           }`}
                           aria-label={item.isAvailable ? '86 item' : 'Restore item'}
                         >
                           <span
-                            className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                              item.isAvailable ? 'translate-x-4' : 'translate-x-0'
+                            className={`absolute left-0.5 top-0.5 h-[18px] w-[18px] rounded-full bg-background shadow transition-transform ${
+                              item.isAvailable ? 'translate-x-5' : 'translate-x-0'
                             }`}
                           />
                         </button>
-                        <span className="text-xs text-gray-400">
-                          {item.isAvailable ? 'Available' : '86\'d'}
+                        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                          {item.isAvailable ? 'Available' : "86'd"}
                         </span>
                       </div>
                     </div>
@@ -280,28 +275,34 @@ export default function MenuPage() {
 
       {/* Add item modal */}
       {showAddItem && (
-        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center">
-          <div
+        <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center">
+          <button
+            type="button"
             className="absolute inset-0 bg-black/50"
+            aria-label="Close"
             onClick={() => setShowAddItem(false)}
           />
-          <div className="relative w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-base font-bold text-gray-900 mb-4">Add menu item</h2>
+          <div className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-[14px] border border-border bg-card p-6 shadow-xl sm:max-w-lg sm:rounded-[14px]">
+            <h2 className="mb-4 font-display text-2xl font-light text-foreground">Add menu item</h2>
 
             <form onSubmit={handleSaveItem} className="space-y-4">
-              {/* Photo upload */}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Photo</label>
+                <label className="mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                  Photo
+                </label>
                 <div
                   onClick={() => fileRef.current?.click()}
-                  className="w-full h-28 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors overflow-hidden"
+                  onKeyDown={(e) => e.key === 'Enter' && fileRef.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  className="flex h-28 w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-border transition-colors hover:border-primary"
                 >
                   {pendingImageUrl ? (
-                    <img src={pendingImageUrl} alt="preview" className="w-full h-full object-cover" />
+                    <img src={pendingImageUrl} alt="preview" className="h-full w-full object-cover" />
                   ) : uploadingPhoto ? (
-                    <p className="text-xs text-gray-400">Uploading...</p>
+                    <p className="text-xs text-muted-foreground">Uploading...</p>
                   ) : (
-                    <p className="text-xs text-gray-400">Click to upload photo</p>
+                    <p className="text-xs text-muted-foreground">Click to upload photo</p>
                   )}
                 </div>
                 <input
@@ -317,32 +318,36 @@ export default function MenuPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Item name</label>
+                <label className="mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                  Item name
+                </label>
                 <input
                   type="text"
                   required
                   maxLength={120}
                   value={itemForm.name}
                   onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                  className="w-full rounded-[10px] border border-border bg-scrim-2 px-4 py-3 font-body text-[17px] focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Description <span className="font-normal text-gray-400">(optional)</span>
+                <label className="mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                  Description <span className="font-normal normal-case text-muted-foreground/80">(optional)</span>
                 </label>
                 <textarea
                   maxLength={400}
                   rows={2}
                   value={itemForm.description}
                   onChange={(e) => setItemForm((f) => ({ ...f, description: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black resize-none"
+                  className="w-full resize-none rounded-[10px] border border-border bg-scrim-2 px-4 py-3 font-body text-[17px] focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Price ($)</label>
+                <label className="mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                  Price ($)
+                </label>
                 <input
                   type="number"
                   required
@@ -351,12 +356,14 @@ export default function MenuPage() {
                   placeholder="14.00"
                   value={itemForm.price}
                   onChange={(e) => setItemForm((f) => ({ ...f, price: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                  className="w-full rounded-[10px] border border-border bg-scrim-2 px-4 py-3 font-body text-[17px] focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-2">Allergens</label>
+                <label className="mb-2 block font-mono text-[9px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                  Allergens
+                </label>
                 <div className="flex flex-wrap gap-2">
                   {ALLERGEN_OPTIONS.map((allergen) => {
                     const selected = itemForm.allergens.includes(allergen);
@@ -372,10 +379,10 @@ export default function MenuPage() {
                               : [...f.allergens, allergen],
                           }))
                         }
-                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        className={`rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider transition-colors ${
                           selected
-                            ? 'bg-amber-50 text-amber-700 border-amber-300'
-                            : 'text-gray-500 border-gray-200 hover:border-gray-400'
+                            ? 'border-amber-soft-line bg-amber-soft text-primary'
+                            : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
                         }`}
                       >
                         {allergen}
@@ -385,20 +392,20 @@ export default function MenuPage() {
                 </div>
               </div>
 
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="checkbox"
                   checked={itemForm.isPopular}
                   onChange={(e) => setItemForm((f) => ({ ...f, isPopular: e.target.checked }))}
-                  className="rounded"
+                  className="rounded border-border"
                 />
-                <span className="text-sm text-gray-700">
+                <span className="font-body text-sm text-foreground">
                   Mark as featured (shows in the Featured row on the diner&apos;s tab)
                 </span>
               </label>
 
               {itemError && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {itemError}
                 </p>
               )}
@@ -407,14 +414,14 @@ export default function MenuPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddItem(false)}
-                  className="flex-1 py-2.5 border border-gray-300 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
+                  className="flex-1 rounded-xl border border-border py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors hover:bg-scrim-2"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingItem || uploadingPhoto}
-                  className="flex-1 py-2.5 bg-black text-white text-sm font-medium rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                  className="flex-1 rounded-xl bg-primary py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-primary-foreground transition-colors hover:bg-amber-light disabled:opacity-50"
                 >
                   {savingItem ? 'Saving...' : 'Add item'}
                 </button>

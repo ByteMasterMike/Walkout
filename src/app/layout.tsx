@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Fraunces, Inter, JetBrains_Mono } from 'next/font/google';
+import { Fraunces, Instrument_Serif, Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import Providers from '@/components/Providers';
@@ -17,6 +17,14 @@ const inter = Inter({
   subsets: ['latin'],
   variable: '--font-sans',
   weight: ['400', '500', '600', '700'],
+  display: 'swap',
+});
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ['latin'],
+  variable: '--font-body',
+  weight: '400',
+  style: ['normal', 'italic'],
   display: 'swap',
 });
 
@@ -58,7 +66,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+      className={`${fraunces.variable} ${instrumentSerif.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
       <head>
         <script
@@ -67,8 +75,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen bg-background font-sans antialiased">
+      <body className="min-h-screen bg-background antialiased">
         <Providers>
+          <div className="grain" aria-hidden />
           <Navbar />
           <PageTransition>{children}</PageTransition>
         </Providers>

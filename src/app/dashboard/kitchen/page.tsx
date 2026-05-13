@@ -49,20 +49,20 @@ function getTileKey(tile: KdsTile): string {
 
 function tileColorClass(tile: KdsTile): string {
   const statuses = tile.items.map((i) => i.status);
-  if (statuses.includes('CASH_PENDING')) return 'border-red-500 bg-red-50';
-  if (statuses.every((s) => s === 'SERVED' || s === 'CANCELLED')) return 'border-green-400 bg-green-50';
-  if (statuses.some((s) => s === 'PREPPING')) return 'border-orange-400 bg-orange-50';
-  return 'border-yellow-400 bg-yellow-50';
+  if (statuses.includes('CASH_PENDING')) return 'border-destructive/50 bg-destructive/10';
+  if (statuses.every((s) => s === 'SERVED' || s === 'CANCELLED')) return 'border-moss/40 bg-moss/10 opacity-60';
+  if (statuses.some((s) => s === 'PREPPING')) return 'border-amber-soft-line bg-amber-soft';
+  return 'border-border bg-card';
 }
 
 function itemStatusClass(status: OrderItemStatus): string {
   const map: Record<OrderItemStatus, string> = {
-    PENDING:      'bg-yellow-100 text-yellow-800',
-    CONFIRMED:    'bg-yellow-100 text-yellow-800',
-    PREPPING:     'bg-orange-100 text-orange-800',
-    SERVED:       'bg-green-100 text-green-800',
-    CANCELLED:    'bg-gray-100 text-gray-400',
-    CASH_PENDING: 'bg-red-100 text-red-700',
+    PENDING:      'border border-border bg-scrim-3 text-foreground',
+    CONFIRMED:    'border border-amber-soft-line bg-amber-soft text-primary',
+    PREPPING:     'border border-primary/40 bg-amber-soft text-primary',
+    SERVED:       'border border-moss/50 bg-moss/15 text-moss',
+    CANCELLED:    'border border-border bg-muted text-muted-foreground',
+    CASH_PENDING: 'border border-destructive/45 bg-destructive/15 text-destructive',
   };
   return map[status];
 }
@@ -80,9 +80,9 @@ function elapsedLabel(iso: string): string {
 
 function elapsedColorClass(iso: string): string {
   const mins = elapsedMs(iso) / 60000;
-  if (mins >= 10) return 'text-red-600 font-bold';
-  if (mins >= 5)  return 'text-amber-600 font-semibold';
-  return 'text-gray-400';
+  if (mins >= 10) return 'text-destructive font-bold';
+  if (mins >= 5)  return 'text-primary font-semibold';
+  return 'text-muted-foreground';
 }
 
 // Mock tiles — TODO: replace with useRestaurantStream subscription
@@ -177,83 +177,83 @@ export default function KitchenPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-950 p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-white text-sm font-semibold tracking-wide uppercase">
+    <div className="min-h-screen p-4 md:p-8">
+      <div className="mb-6 flex items-end justify-between gap-4 border-b border-border pb-6">
+        <h1 className="font-display text-3xl font-light tracking-[-0.03em] text-foreground md:text-4xl">
           Kitchen Display
         </h1>
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-          {/* TODO: show SSE connection status */}
+        <div className="flex items-center gap-2 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-moss" />
           <span>Live</span>
         </div>
       </div>
 
       {activeTiles.length === 0 ? (
-        <div className="flex items-center justify-center h-64">
-          <p className="text-gray-600 text-sm">No active orders</p>
+        <div className="flex h-64 items-center justify-center rounded-[14px] border border-dashed border-border bg-card">
+          <p className="font-body text-muted-foreground">No active orders</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {activeTiles.map((tile) => (
             <div
               key={getTileKey(tile)}
-              className={`rounded-xl border-2 p-3 ${tileColorClass(tile)}`}
+              className={`flex min-h-[240px] flex-col gap-2.5 rounded-xl border p-4 transition-all duration-200 hover:-translate-y-0.5 ${tileColorClass(tile)}`}
             >
               {/* Tile header */}
-              <div className="flex items-start justify-between mb-2">
+              <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-bold text-gray-900">
+                  <p className="font-display text-2xl font-light tracking-[-0.02em] text-foreground">
                     Table {tile.tableNumber}
                   </p>
-                  <p className="text-xs text-gray-600">{tile.participantName}</p>
+                  <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
+                    {tile.participantName}
+                  </p>
                 </div>
-                <span className={`text-xs font-mono ${elapsedColorClass(tile.openedAt)}`}>
+                <span className={`font-mono text-sm tabular-nums ${elapsedColorClass(tile.openedAt)}`}>
                   {elapsedLabel(tile.openedAt)}
                 </span>
               </div>
 
               {/* Dietary notes */}
               {tile.dietaryNotes && (
-                <p className="text-xs text-red-700 font-medium mb-2">
+                <p className="border-b border-border pb-2 font-body text-sm font-medium text-destructive">
                   Dietary: {tile.dietaryNotes}
                 </p>
               )}
 
-              <div className="border-t border-black/10 my-2" />
-
               {/* Items */}
-              <div className="space-y-2">
+              <div className="flex flex-1 flex-col gap-2">
                 {tile.items
                   .filter((i) => i.status !== 'CANCELLED')
                   .map((item) => (
                     <div key={item.id}>
                       <div className="flex items-start justify-between gap-1">
-                        <p className="text-xs font-medium text-gray-900 leading-tight">
+                        <p className="text-[15px] font-medium leading-tight text-foreground">
                           {item.quantity > 1 && (
-                            <span className="font-bold">{item.quantity}x </span>
+                            <span className="font-mono text-[11px] text-primary">{item.quantity}x </span>
                           )}
                           {item.name}
                         </p>
                       </div>
                       {item.notes && (
-                        <p className="text-xs text-gray-600 italic mt-0.5">{item.notes}</p>
+                        <p className="mt-0.5 font-body text-[13px] italic text-muted-foreground">{item.notes}</p>
                       )}
                       {item.allergens.length > 0 && (
-                        <p className="text-xs text-red-600 mt-0.5">
+                        <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-destructive">
                           Allergens: {item.allergens.join(', ')}
                         </p>
                       )}
                       {STATUS_NEXT[item.status] ? (
                         <button
+                          type="button"
                           onClick={() => advanceItem(getTileKey(tile), item.id, item.status)}
-                          className={`mt-1.5 w-full text-xs py-1.5 rounded-lg font-medium transition-opacity hover:opacity-80 ${itemStatusClass(item.status)}`}
+                          className={`mt-2 w-full rounded-lg py-2 text-center font-mono text-[9px] font-medium uppercase tracking-[0.22em] transition-opacity hover:opacity-90 ${itemStatusClass(item.status)}`}
                         >
                           {STATUS_LABEL[item.status]}
                         </button>
                       ) : (
                         <span
-                          className={`mt-1.5 block text-center w-full text-xs py-1 rounded-lg font-medium ${itemStatusClass(item.status)}`}
+                          className={`mt-2 block w-full rounded-lg py-2 text-center font-mono text-[9px] font-medium uppercase tracking-[0.22em] ${itemStatusClass(item.status)}`}
                         >
                           {STATUS_LABEL[item.status]}
                         </span>

@@ -9,12 +9,13 @@ export default async function DashboardPage() {
   const { role, restaurantId } = session.user;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-10">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Welcome back, {session.user.name} &middot;{' '}
-          <span className="font-medium text-gray-700">{role}</span>
+    <div className="mx-auto max-w-4xl px-6 py-10 md:px-8">
+      <header className="mb-10 border-b border-border pb-6">
+        <h1 className="font-display text-4xl font-light tracking-[-0.035em] text-foreground md:text-5xl">
+          Dashboard
+        </h1>
+        <p className="mt-3 max-w-xl font-body text-lg text-muted-foreground">
+          Welcome back, {session.user.name} · <span className="text-foreground">{role}</span>
         </p>
       </header>
 
@@ -33,8 +34,8 @@ export default async function DashboardPage() {
         <DashLink href="/dashboard/requests" label="Service Requests" description="Diner requests from the floor" />
       </div>
 
-      <p className="mt-8 text-xs text-gray-400">
-        Restaurant ID: <span className="font-mono">{restaurantId}</span>
+      <p className="mt-10 font-mono text-[11px] text-muted-foreground">
+        Restaurant ID: <span className="text-amber-deep">{restaurantId}</span>
       </p>
     </div>
   );
@@ -52,10 +53,10 @@ function DashLink({
   return (
     <Link
       href={href}
-      className="block rounded-xl border border-gray-200 bg-white p-5 hover:border-gray-400 hover:shadow-sm transition-all"
+      className="group block rounded-[14px] border border-border bg-card p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-soft-line hover:shadow-md"
     >
-      <p className="font-semibold text-gray-900 text-sm">{label}</p>
-      <p className="mt-1 text-xs text-gray-500">{description}</p>
+      <p className="font-display text-[22px] font-light tracking-[-0.02em] text-card-foreground">{label}</p>
+      <p className="mt-2 font-body text-[15px] leading-snug text-muted-foreground">{description}</p>
     </Link>
   );
 }

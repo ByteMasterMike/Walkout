@@ -147,20 +147,21 @@ export default function RequestsPage() {
   const resolved = requests.filter((r) => r.status === 'RESOLVED');
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto max-w-2xl px-4 py-8 md:px-6">
+      <div className="mb-6 flex items-end justify-between gap-4 border-b border-border pb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Service Requests</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="font-display text-3xl font-light tracking-[-0.03em] text-foreground">Service Requests</h1>
+          <p className="mt-2 font-body text-muted-foreground">
             {open.length} open{acknowledged.length > 0 ? `, ${acknowledged.length} acknowledged` : ''}
           </p>
         </div>
         <button
+          type="button"
           onClick={toggleChime}
-          className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
+          className={`rounded-full border px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors ${
             chimeEnabled
-              ? 'bg-gray-900 text-white border-gray-900'
-              : 'text-gray-500 border-gray-200 hover:border-gray-400'
+              ? 'border-transparent bg-invert text-invert-foreground'
+              : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
           }`}
         >
           {chimeEnabled ? 'Chime on' : 'Chime off'}
@@ -168,11 +169,11 @@ export default function RequestsPage() {
       </div>
 
       {requests.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-sm text-gray-400">No open requests.</p>
+        <div className="py-16 text-center">
+          <p className="font-body text-muted-foreground">No open requests.</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2.5">
           {/* Open requests */}
           {open.map((req) => (
             <RequestRow
@@ -223,51 +224,54 @@ function RequestRow({
 
   return (
     <div
-      className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
+      className={`flex items-center gap-[18px] rounded-xl border px-5 py-4 transition-all ${
         isResolved
-          ? 'bg-gray-50 border-gray-100 opacity-50'
+          ? 'border-border bg-muted/30 opacity-50'
           : isAcknowledged
-          ? 'bg-blue-50 border-blue-200'
-          : 'bg-white border-gray-200 shadow-sm'
+          ? 'border-moss/40 bg-moss/10'
+          : 'border-border bg-card shadow-sm'
       }`}
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className={`w-2 h-2 rounded-full shrink-0 ${
-          isResolved ? 'bg-gray-300' : isAcknowledged ? 'bg-blue-400' : 'bg-amber-400'
-        }`} />
-        <div className="min-w-0">
-          <p className={`text-sm font-medium truncate ${isResolved ? 'text-gray-400' : 'text-gray-900'}`}>
-            Table {req.tableNumber} — {TYPE_LABELS[req.type] ?? req.type}
-            {req.notes && <span className="font-normal text-gray-500"> ({req.notes})</span>}
-          </p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {req.dinerName} &middot; {elapsedLabel(req.createdAt)}
-            {req.acknowledgedByName && ` &middot; ${req.acknowledgedByName}`}
-          </p>
-        </div>
+      <div
+        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+          isResolved ? 'bg-muted-foreground' : isAcknowledged ? 'bg-moss' : 'bg-primary animate-pulse'
+        }`}
+      />
+      <div className="min-w-0 flex-1">
+        <p
+          className={`font-display text-2xl font-light leading-none tracking-[-0.02em] ${isResolved ? 'text-muted-foreground' : 'text-foreground'}`}
+        >
+          Table {req.tableNumber} — {TYPE_LABELS[req.type] ?? req.type}
+          {req.notes && <span className="font-body text-[15px] font-normal text-muted-foreground"> ({req.notes})</span>}
+        </p>
+        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+          {req.dinerName} · {elapsedLabel(req.createdAt)}
+          {req.acknowledgedByName && ` · ${req.acknowledgedByName}`}
+        </p>
       </div>
 
-      <div className="flex gap-2 ml-4 shrink-0">
+      <div className="ml-2 flex shrink-0 gap-2">
         {isOpen && (
           <button
+            type="button"
             onClick={() => onAcknowledge(req.id)}
-            className="text-xs px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            className="rounded-full bg-invert px-4 py-2 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-invert-foreground transition-colors hover:opacity-90"
           >
             Acknowledge
           </button>
         )}
         {isAcknowledged && (
           <button
+            type="button"
             onClick={() => onResolve(req.id)}
-            className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            className="rounded-full border border-moss/50 bg-moss/15 px-4 py-2 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-moss transition-colors hover:bg-moss/25"
           >
             Mark Resolved
           </button>
         )}
-        {isResolved && (
-          <span className="text-xs text-gray-400">Done</span>
-        )}
+        {isResolved && <span className="font-mono text-[10px] text-muted-foreground">Done</span>}
       </div>
+
     </div>
   );
 }
