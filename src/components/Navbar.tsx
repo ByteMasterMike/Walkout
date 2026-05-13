@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ProtoMoonIcon, ProtoSunIcon } from '@/components/icons/prototype';
 import { useTheme } from '@/components/ThemeProvider';
-import { SegmentedNav } from '@/components/pitch/SegmentedNav';
 
 function ChevronLogo({ className }: { className?: string }) {
   return (
@@ -29,10 +28,13 @@ export default function Navbar() {
   const { theme, toggle } = useTheme();
   const pathname = usePathname() ?? '';
 
-  const isDashboard = pathname.startsWith('/dashboard');
-  const isDinerPath = pathname.startsWith('/tab');
+  const role = session?.user?.role;
+  const isStaff = role === 'ADMIN' || role === 'MANAGER' || role === 'STAFF';
+  const isDiner = role === 'DINER';
 
-  const dinerHref = isDinerPath ? pathname : '/#diner';
+  const showDashboardLink = isStaff && !pathname.startsWith('/dashboard');
+  const showAccountLink =
+    isDiner && !pathname.startsWith('/account') && !pathname.startsWith('/auth');
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-topbar backdrop-blur-[14px] transition-colors duration-300">
@@ -45,12 +47,21 @@ export default function Navbar() {
         </Link>
 
         <div className="flex min-w-0 flex-1 items-center justify-center px-1 sm:px-4">
-          <SegmentedNav
-            items={[
-              { href: '/dashboard', label: 'Dashboard', active: isDashboard && !isDinerPath },
-              { href: dinerHref, label: 'Diner', active: isDinerPath },
-            ]}
-          />
+          {showDashboardLink ? (
+            <Link
+              href="/dashboard"
+              className="rounded-full border border-transparent px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground"
+            >
+              Dashboard
+            </Link>
+          ) : showAccountLink ? (
+            <Link
+              href="/account"
+              className="rounded-full border border-transparent px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground"
+            >
+              Account
+            </Link>
+          ) : null}
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3.5">

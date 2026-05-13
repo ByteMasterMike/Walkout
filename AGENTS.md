@@ -5,3 +5,5 @@
 ## Learned Workspace Facts
 
 - Restaurant Stripe onboarding for WalkOut is intended to stay on Express Connect (not Standard Connect with a full per-restaurant Stripe Dashboard) unless product requirements change.
+- Customer-facing product and marketing copy use the name **WalkOut** (capital O), not "Walkout."
+- Diner-facing and owner-facing experiences are separate splits; do not mirror the reference demo HTML pattern of pairing both as top-level entry points in the main chrome.
