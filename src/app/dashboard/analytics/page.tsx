@@ -1,17 +1,23 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+
+import { auth } from '@/lib/auth';
+import { getRestaurantDashboardAggregates } from '@/lib/dashboard-aggregates';
 import { PageShell, PageHead, KpiStrip } from '@/components/pitch';
 
-const DEMO_CHART = [
-  { d: 'MON', h: 62, on: false },
-  { d: 'TUE', h: 48, on: false },
-  { d: 'WED', h: 71, on: false },
-  { d: 'THU', h: 58, on: false },
-  { d: 'FRI', h: 95, on: true },
-  { d: 'SAT', h: 88, on: false },
-  { d: 'SUN', h: 74, on: false },
-];
+export const dynamic = 'force-dynamic';
 
-export default function AnalyticsHubPage() {
+function fmtUsd(cents: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+}
+
+export default async function AnalyticsHubPage() {
+  const session = await auth();
+  if (!session?.user?.restaurantId) redirect('/auth/login');
+
+  const agg = await getRestaurantDashboardAggregates(session.user.restaurantId);
+  const weekRevenue = agg.revenueByDay.reduce((s, d) => s + d.cents, 0);
+
   return (
     <PageShell>
       <PageHead
@@ -27,10 +33,7 @@ export default function AnalyticsHubPage() {
               7 days
             </span>
             <span className="rounded-full bg-invert px-3 py-2 font-mono text-[9px] font-medium uppercase tracking-[0.18em] text-invert-foreground">
-              30 days
-            </span>
-            <span className="rounded-full border border-border px-3 py-2 font-mono text-[9px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              YTD
+              Live data
             </span>
           </div>
         }
@@ -38,22 +41,45 @@ export default function AnalyticsHubPage() {
 
       <KpiStrip
         items={[
-          { label: 'Revenue / wk', value: '—', detail: 'TODO: metrics API', detailClass: 'wn' },
-          { label: 'Covers', value: '—', detail: 'TODO' },
-          { label: 'Turn time', value: '—', detail: 'TODO' },
-          { label: 'Walk-out rate', value: '—', detail: 'TODO' },
+          {
+            label: 'Revenue / wk',
+            value: fmtUsd(weekRevenue),
+            detail: 'Sum of captured checks (7d)',
+            detailClass: 'wn',
+          },
+          {
+            label: 'Tables tonight',
+            value: `${agg.tablesActive} / ${agg.tablesTotal}`,
+            detail: 'Open sessions vs tables',
+          },
+          {
+            label: 'Avg ticket tonight',
+            value: agg.avgTicketCents != null ? fmtUsd(agg.avgTicketCents) : '—',
+            detail: 'Captured checks only',
+          },
+          {
+            label: 'Open holds',
+            value: String(agg.openHolds),
+            detail: 'Active authorization holds',
+          },
         ]}
       />
 
       <div className="mono mt-40" style={{ marginBottom: 14 }}>
-        Revenue · sample week (mock)
+        Revenue · last 7 days (captured)
       </div>
       <div className="chart">
-        {DEMO_CHART.map((b) => (
-          <div key={b.d} className={`bar ${b.on ? 'on' : ''}`} data-d={b.d}>
-            <div className="h" style={{ height: `${b.h}%` }} />
-          </div>
-        ))}
+        {agg.revenueByDay.map((b) => {
+          const h = agg.revenueWeekMaxCents > 0 ? Math.round((b.cents / agg.revenueWeekMaxCents) * 100) : 0;
+          const today =
+            b.date ===
+            agg.revenueByDay[agg.revenueByDay.length - 1]?.date;
+          return (
+            <div key={b.date} className={`bar ${today ? 'on' : ''}`} data-d={b.label}>
+              <div className="h" style={{ height: `${Math.max(h, 4)}%` }} />
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-40 flex flex-col gap-3">

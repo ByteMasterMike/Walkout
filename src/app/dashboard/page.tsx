@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { getRestaurantDashboardAggregates } from '@/lib/dashboard-aggregates';
 import {
   PageShell,
   PageHead,
@@ -16,6 +17,12 @@ import {
   TileChefIcon,
   TileBellIcon,
 } from '@/components/icons/prototype';
+
+export const dynamic = 'force-dynamic';
+
+function fmtUsd(cents: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+}
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -35,32 +42,34 @@ export default async function DashboardPage() {
     minute: '2-digit',
   });
 
+  const agg = await getRestaurantDashboardAggregates(restaurantId);
+
   const kpiItems = [
     {
       label: 'Tables active',
       value: (
         <>
-          <em>—</em>
-          <span className="c"> / —</span>
+          <em>{agg.tablesActive}</em>
+          <span className="c"> / {agg.tablesTotal}</span>
         </>
       ),
-      detail: 'TODO: wire aggregates API',
+      detail: 'Open sessions vs active tables',
     },
     {
       label: 'Revenue tonight',
-      value: '—',
-      detail: 'TODO',
+      value: fmtUsd(agg.revenueTonightCents),
+      detail: 'Captured totals — restaurant local day',
     },
     {
       label: 'Avg ticket',
-      value: '—',
-      detail: 'TODO',
+      value: agg.avgTicketCents != null ? fmtUsd(agg.avgTicketCents) : '—',
+      detail: 'Tonight — captured checks only',
       detailClass: 'wn',
     },
     {
       label: 'Open holds',
-      value: '—',
-      detail: 'TODO',
+      value: String(agg.openHolds),
+      detail: 'Participants with active card holds',
     },
   ];
 
@@ -145,8 +154,7 @@ export default async function DashboardPage() {
         }
         subtitle={
           <>
-            {dayLine} · signed in as {role}. Operational KPIs below are placeholders until an
-            aggregates API exists.
+            {dayLine} · signed in as {role}. KPIs reflect your restaurant&apos;s local day in the database.
           </>
         }
         meta={

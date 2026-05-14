@@ -66,9 +66,45 @@ export default function MenuPage() {
   const [activeMenuCat, setActiveMenuCat] = useState<string | null>(null);
 
   async function loadMenu() {
-    // TODO: fetch from /api/restaurants/[restaurantId]/menu once Michael ships it
-    setCategories([]);
-    setLoading(false);
+    setLoading(true);
+    setCatError('');
+    try {
+      const [catRes, itemRes] = await Promise.all([
+        fetch('/api/restaurant/menu/categories', { credentials: 'include' }),
+        fetch('/api/restaurant/menu/items', { credentials: 'include' }),
+      ]);
+      if (!catRes.ok || !itemRes.ok) {
+        setCategories([]);
+        setCatError('Could not load menu. Check you are signed in as staff with menu access.');
+        return;
+      }
+      const catData = (await catRes.json()) as { categories: MenuCategoryRow[] };
+      const itemData = (await itemRes.json()) as { items: MenuItemRow[] };
+      const byCat = new Map<string | null, MenuItemRow[]>();
+      for (const it of itemData.items) {
+        const key = it.categoryId;
+        const arr = byCat.get(key) ?? [];
+        arr.push(it);
+        byCat.set(key, arr);
+      }
+      const merged: MenuCategoryRow[] = catData.categories.map((c) => ({
+        ...c,
+        items: (byCat.get(c.id) ?? []).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+      }));
+      const uncategorized = byCat.get(null);
+      if (uncategorized?.length) {
+        merged.push({
+          id: '__uncat__',
+          name: 'Uncategorized',
+          sortOrder: 9999,
+          isVisible: true,
+          items: uncategorized,
+        });
+      }
+      setCategories(merged);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { loadMenu(); }, []);
@@ -87,46 +123,62 @@ export default function MenuPage() {
     e.preventDefault();
     setCatError('');
     setAddingCat(true);
-    // TODO: POST /api/restaurants/[restaurantId]/menu/categories
-    await new Promise((r) => setTimeout(r, 300));
-    setCategories((prev) => [
-      ...prev,
-      {
-        id: `cat-${Date.now()}`,
-        name: newCatName,
-        sortOrder: prev.length,
-        isVisible: true,
-        items: [],
-      },
-    ]);
-    setNewCatName('');
-    setAddingCat(false);
+    try {
+      const res = await fetch('/api/restaurant/menu/categories', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newCatName.trim(),
+          sortOrder: categories.filter((c) => c.id !== '__uncat__').length,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setCatError(typeof body.error === 'string' ? body.error : 'Could not add category.');
+        return;
+      }
+      setNewCatName('');
+      await loadMenu();
+    } finally {
+      setAddingCat(false);
+    }
   }
 
   async function toggleAvailable(categoryId: string, itemId: string, current: boolean) {
-    // TODO: PATCH /api/restaurants/[restaurantId]/menu/items/[itemId]
+    const next = !current;
     setCategories((prev) =>
       prev.map((cat) =>
         cat.id === categoryId
           ? {
               ...cat,
               items: cat.items.map((item) =>
-                item.id === itemId ? { ...item, isAvailable: !current } : item
+                item.id === itemId ? { ...item, isAvailable: next } : item
               ),
             }
           : cat
       )
     );
+    try {
+      const res = await fetch(`/api/restaurant/menu/items/${itemId}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isAvailable: next }),
+      });
+      if (!res.ok) {
+        await loadMenu();
+      }
+    } catch {
+      await loadMenu();
+    }
   }
 
-  async function handlePhotoUpload(file: File) {
+  async function handlePhotoUpload(_file: File) {
     setUploadingPhoto(true);
-    // TODO: get signed upload URL from /api/restaurant/menu/upload-url
-    //       then PUT file to the signed URL, store resulting R2 public URL
-    await new Promise((r) => setTimeout(r, 600));
-    const mockUrl = URL.createObjectURL(file);
-    setPendingImageUrl(mockUrl);
+    await new Promise((r) => setTimeout(r, 300));
     setUploadingPhoto(false);
+    setItemError('Photo upload is not wired yet — add items without a photo for now.');
   }
 
   function openAddItem(categoryId: string) {
@@ -147,34 +199,41 @@ export default function MenuPage() {
       return;
     }
 
+    if (!addItemCategoryId || addItemCategoryId === '__uncat__') {
+      setItemError('Pick a real category (not Uncategorized).');
+      return;
+    }
+
     setSavingItem(true);
-    // TODO: POST /api/restaurants/[restaurantId]/menu/items
-    await new Promise((r) => setTimeout(r, 400));
-
-    const newItem: MenuItemRow = {
-      id: `item-${Date.now()}`,
-      name: itemForm.name,
-      description: itemForm.description || null,
-      price: priceNum.toFixed(2),
-      imageUrl: pendingImageUrl,
-      allergens: itemForm.allergens,
-      isAvailable: true,
-      isPopular: itemForm.isPopular,
-      sortOrder: 0,
-      categoryId: addItemCategoryId,
-    };
-
-    setCategories((prev) =>
-      prev.map((cat) =>
-        cat.id === addItemCategoryId
-          ? { ...cat, items: [...cat.items, newItem] }
-          : cat
-      )
-    );
-
-    setSavingItem(false);
-    setShowAddItem(false);
-    setPendingImageUrl(null);
+    try {
+      const res = await fetch('/api/restaurant/menu/items', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryId: addItemCategoryId,
+          name: itemForm.name.trim(),
+          description: itemForm.description.trim() || undefined,
+          price: priceNum.toFixed(2),
+          allergens: itemForm.allergens,
+          isPopular: itemForm.isPopular,
+          isAvailable: true,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setItemError(
+          typeof body.error === 'string' ? body.error : 'Could not save item. Check permissions (Manager/Admin).'
+        );
+        return;
+      }
+      setShowAddItem(false);
+      setPendingImageUrl(null);
+      setItemForm({ ...EMPTY_ITEM });
+      await loadMenu();
+    } finally {
+      setSavingItem(false);
+    }
   }
 
   return (
@@ -189,8 +248,8 @@ export default function MenuPage() {
         actions={
           <button
             type="button"
-            disabled={!activeMenuCat}
-            onClick={() => activeMenuCat && openAddItem(activeMenuCat)}
+            disabled={!activeMenuCat || activeMenuCat === '__uncat__'}
+            onClick={() => activeMenuCat && activeMenuCat !== '__uncat__' && openAddItem(activeMenuCat)}
             className="rounded-full bg-primary px-5 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-primary-foreground transition-colors hover:bg-amber-light disabled:opacity-40"
           >
             + New item
@@ -203,7 +262,7 @@ export default function MenuPage() {
           type="text"
           required
           maxLength={80}
-          placeholder="Table number or name (e.g. 1 or Bar)"
+          placeholder="Category name (e.g. Mains)"
           value={newCatName}
           onChange={(e) => setNewCatName(e.target.value)}
           className="min-h-[48px] flex-1 rounded-[10px] border border-border bg-scrim-2 px-4 py-2 font-body text-[17px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -312,21 +371,23 @@ export default function MenuPage() {
             <form onSubmit={handleSaveItem} className="space-y-4">
               <div>
                 <label className="mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
-                  Photo
+                  Photo <span className="font-normal normal-case text-muted-foreground/80">(soon)</span>
                 </label>
                 <div
                   onClick={() => fileRef.current?.click()}
                   onKeyDown={(e) => e.key === 'Enter' && fileRef.current?.click()}
                   role="button"
                   tabIndex={0}
-                  className="flex h-28 w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-border transition-colors hover:border-primary"
+                  className="flex h-28 w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-border transition-colors hover:border-primary opacity-70"
                 >
                   {pendingImageUrl ? (
                     <img src={pendingImageUrl} alt="preview" className="h-full w-full object-cover" />
                   ) : uploadingPhoto ? (
-                    <p className="text-xs text-muted-foreground">Uploading...</p>
+                    <p className="text-xs text-muted-foreground">Working...</p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Click to upload photo</p>
+                    <p className="px-2 text-center text-xs text-muted-foreground">
+                      Photo upload coming soon — skip for now
+                    </p>
                   )}
                 </div>
                 <input

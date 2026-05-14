@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 
-type RestaurantStreamEvent =
+export type RestaurantStreamEvent =
   | { type: 'connected'; restaurantId: string }
   | { type: 'session_update'; payload: unknown }
   | { type: 'order_update'; payload: unknown }

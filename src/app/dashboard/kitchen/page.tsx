@@ -1,14 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSession } from 'next-auth/react';
 
 import { PageShell, PageHead, PageHeadMetaDot } from '@/components/pitch';
-
-// ---------------------------------------------------------------------------
-// Types — mirrors /api/restaurant/stream order_item events
-// TODO: wire to useRestaurantStream hook once Michael ships
-//       /api/restaurant/stream in src/app/api/restaurant/stream/route.ts
-// ---------------------------------------------------------------------------
+import { useRestaurantStream, type RestaurantStreamEvent } from '@/hooks/useRestaurantStream';
 
 type OrderItemStatus = 'PENDING' | 'CONFIRMED' | 'PREPPING' | 'SERVED' | 'CANCELLED' | 'CASH_PENDING';
 
@@ -31,6 +27,13 @@ type KdsItem = {
 };
 
 const STATUS_NEXT: Partial<Record<OrderItemStatus, OrderItemStatus>> = {
+  PENDING: 'CONFIRMED',
+  CONFIRMED: 'PREPPING',
+  PREPPING: 'SERVED',
+};
+
+/** API accepts these transition targets (see OrderStatusUpdateSchema). */
+const STATUS_POST_BODY: Partial<Record<OrderItemStatus, 'CONFIRMED' | 'PREPPING' | 'SERVED'>> = {
   PENDING: 'CONFIRMED',
   CONFIRMED: 'PREPPING',
   PREPPING: 'SERVED',
@@ -85,98 +88,64 @@ function actClassForStatus(status: OrderItemStatus): string {
   return '';
 }
 
-// Mock tiles — TODO: replace with useRestaurantStream subscription
-// IMPORTANT: this component must explicitly ignore SSE events with type='service_request'
-const MOCK_TILES: KdsTile[] = [
-  {
-    tableNumber: '2',
-    participantName: 'Michael',
-    dietaryNotes: 'nut allergy',
-    openedAt: new Date(Date.now() - 4 * 60000).toISOString(),
-    items: [
-      {
-        id: 'o1',
-        name: 'Ribeye Steak',
-        quantity: 1,
-        notes: 'medium rare',
-        status: 'PREPPING',
-        allergens: ['dairy'],
-        updatedAt: new Date(Date.now() - 3 * 60000).toISOString(),
-      },
-      {
-        id: 'o2',
-        name: 'Lobster Bisque',
-        quantity: 1,
-        notes: null,
-        status: 'SERVED',
-        allergens: ['shellfish', 'dairy'],
-        updatedAt: new Date(Date.now() - 2 * 60000).toISOString(),
-      },
-    ],
-  },
-  {
-    tableNumber: '2',
-    participantName: 'Sarah',
-    dietaryNotes: null,
-    openedAt: new Date(Date.now() - 2 * 60000).toISOString(),
-    items: [
-      {
-        id: 'o3',
-        name: 'Cheeseburger',
-        quantity: 1,
-        notes: 'no pickles',
-        status: 'PENDING',
-        allergens: ['dairy', 'gluten'],
-        updatedAt: new Date(Date.now() - 2 * 60000).toISOString(),
-      },
-      {
-        id: 'o4',
-        name: 'Caesar Salad',
-        quantity: 1,
-        notes: null,
-        status: 'PENDING',
-        allergens: ['dairy', 'gluten'],
-        updatedAt: new Date(Date.now() - 2 * 60000).toISOString(),
-      },
-    ],
-  },
-  {
-    tableNumber: 'Bar 1',
-    participantName: 'Guest',
-    dietaryNotes: 'vegan',
-    openedAt: new Date(Date.now() - 12 * 60000).toISOString(),
-    items: [
-      {
-        id: 'o5',
-        name: 'Caesar Salad',
-        quantity: 2,
-        notes: 'no cheese, no croutons',
-        status: 'CASH_PENDING',
-        allergens: [],
-        updatedAt: new Date(Date.now() - 11 * 60000).toISOString(),
-      },
-    ],
-  },
-];
-
 export default function KitchenPage() {
+  const { data: session } = useSession();
+  const restaurantId = session?.user?.restaurantId ?? '';
+
   const [tiles, setTiles] = useState<KdsTile[]>([]);
   const [, setTick] = useState(0);
-  const servedTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [loading, setLoading] = useState(true);
+
+  const fetchKitchen = useCallback(async () => {
+    if (!restaurantId) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/restaurant/kitchen', { credentials: 'include' });
+      if (!res.ok) {
+        setTiles([]);
+        return;
+      }
+      const data = (await res.json()) as { tiles: KdsTile[] };
+      setTiles(data.tiles ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, [restaurantId]);
 
   useEffect(() => {
-    // TODO: replace with useRestaurantStream hook
-    // CRITICAL: when wiring SSE, filter OUT events where event.type === 'service_request'
-    // — service requests must never appear on the KDS (PRD §15.1)
-    setTiles(MOCK_TILES);
+    void fetchKitchen();
+  }, [fetchKitchen]);
 
+  useEffect(() => {
     const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  function advanceItem(tileKey: string, itemId: string, current: OrderItemStatus) {
-    const next = STATUS_NEXT[current];
-    if (!next) return;
+  // Polling backup: order_items are not on the restaurant SSE channel.
+  useEffect(() => {
+    if (!restaurantId) return;
+    const id = setInterval(() => {
+      void fetchKitchen();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [restaurantId, fetchKitchen]);
+
+  const onStreamEvent = useCallback((event: RestaurantStreamEvent) => {
+    if (event.type === 'session_update' || event.type === 'table_update') {
+      void fetchKitchen();
+    }
+  }, [fetchKitchen]);
+
+  useRestaurantStream({
+    restaurantId,
+    onEvent: onStreamEvent,
+    enabled: Boolean(restaurantId),
+  });
+
+  async function advanceItem(tileKey: string, itemId: string, current: OrderItemStatus) {
+    const nextStatus = STATUS_NEXT[current];
+    const postStatus = nextStatus ? STATUS_POST_BODY[current] : undefined;
+    if (!nextStatus || !postStatus) return;
 
     setTiles((prev) =>
       prev.map((tile) => {
@@ -184,32 +153,31 @@ export default function KitchenPage() {
         return {
           ...tile,
           items: tile.items.map((item) =>
-            item.id === itemId ? { ...item, status: next, updatedAt: new Date().toISOString() } : item,
+            item.id === itemId ? { ...item, status: nextStatus, updatedAt: new Date().toISOString() } : item,
           ),
         };
       }),
     );
 
-    if (next === 'SERVED') {
-      const timer = setTimeout(() => {
-        setTiles((prev) =>
-          prev
-            .map((tile) => {
-              if (getTileKey(tile) !== tileKey) return tile;
-              return {
-                ...tile,
-                items: tile.items.filter((item) => item.id !== itemId),
-              };
-            })
-            .filter((tile) => tile.items.length > 0),
-        );
-        servedTimers.current.delete(itemId);
-      }, 60000);
-      servedTimers.current.set(itemId, timer);
+    try {
+      const res = await fetch(`/api/restaurant/orders/${itemId}/status`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: postStatus }),
+      });
+      if (!res.ok) {
+        await fetchKitchen();
+      }
+    } catch {
+      await fetchKitchen();
     }
   }
 
-  const activeTiles = tiles.filter((tile) => tile.items.some((i) => i.status !== 'CANCELLED'));
+  const activeTiles = useMemo(
+    () => tiles.filter((tile) => tile.items.some((i) => i.status !== 'CANCELLED')),
+    [tiles],
+  );
 
   const cashCount = activeTiles.filter((t) => t.items.some((i) => i.status === 'CASH_PENDING')).length;
 
@@ -230,7 +198,11 @@ export default function KitchenPage() {
         }
       />
 
-      {activeTiles.length === 0 ? (
+      {loading && activeTiles.length === 0 ? (
+        <div className="flex h-64 items-center justify-center rounded-[14px] border border-dashed border-border bg-card">
+          <p className="font-body text-muted-foreground">Loading kitchen…</p>
+        </div>
+      ) : activeTiles.length === 0 ? (
         <div className="flex h-64 items-center justify-center rounded-[14px] border border-dashed border-border bg-card">
           <p className="font-body text-muted-foreground">No active orders</p>
         </div>

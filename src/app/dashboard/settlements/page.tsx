@@ -48,10 +48,18 @@ function elapsedLabel(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function fmtUsd(cents: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+}
+
 export default function SettlementsPage() {
   const [settlements, setSettlements] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [actioning, setActioning] = useState<string | null>(null);
+  const [agg, setAgg] = useState<{
+    revenueTonightCents: number;
+    openHolds: number;
+  } | null>(null);
   // actioning format: `${rowId}-${action}`
   const [confirmRow, setConfirmRow] = useState<{ id: string; action: SettlementAction } | null>(null);
 
@@ -71,6 +79,17 @@ export default function SettlementsPage() {
 
   useEffect(() => {
     void loadSettlements();
+    void fetch('/api/restaurant/dashboard/aggregates', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d.revenueTonightCents === 'number') {
+          setAgg({
+            revenueTonightCents: d.revenueTonightCents,
+            openHolds: typeof d.openHolds === 'number' ? d.openHolds : 0,
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   async function handleAction(rowId: string, action: SettlementAction) {
@@ -120,9 +139,14 @@ export default function SettlementsPage() {
         actions={
           <button
             type="button"
+            onClick={() => {
+              const y = new Date().getFullYear();
+              const q = Math.ceil((new Date().getMonth() + 1) / 3);
+              window.open(`/api/restaurant/analytics/tax/quarterly?year=${y}&quarter=${q}`, '_blank');
+            }}
             className="rounded-full border border-border px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
           >
-            Export CSV
+            Export tax CSV
           </button>
         }
       />
@@ -130,9 +154,22 @@ export default function SettlementsPage() {
       <KpiStrip
         items={[
           { label: 'Open issues', value: <em>{settlements.length}</em>, detail: 'Pending actions' },
-          { label: 'Captured today', value: '—', detail: 'TODO: ledger API', detailClass: 'wn' },
-          { label: 'Walkout fee', value: '—', detail: 'TODO' },
-          { label: 'Stripe fees', value: '—', detail: 'TODO' },
+          {
+            label: 'Captured today',
+            value: agg ? fmtUsd(agg.revenueTonightCents) : '—',
+            detail: 'Same window as dashboard — local restaurant day',
+            detailClass: 'wn',
+          },
+          {
+            label: 'Open holds',
+            value: agg != null ? String(agg.openHolds) : '—',
+            detail: 'Active card holds across open tabs',
+          },
+          {
+            label: 'Stripe fees',
+            value: '—',
+            detail: 'See Stripe Dashboard for processor fees',
+          },
         ]}
       />
 

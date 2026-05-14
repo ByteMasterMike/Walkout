@@ -8,8 +8,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-  if (!session?.user?.restaurantId || !session.user.staffId) {
+  if (!session?.user?.restaurantId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  if (
+    session.user.role !== 'ADMIN' &&
+    session.user.role !== 'MANAGER' &&
+    session.user.role !== 'STAFF'
+  ) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const { id } = await params
@@ -42,7 +49,7 @@ export async function POST(
     data: {
       status: 'ACKNOWLEDGED',
       acknowledgedAt: new Date(),
-      acknowledgedById: session.user.staffId,
+      acknowledgedById: session.user.staffId ?? null,
     },
     select: { id: true, status: true, acknowledgedAt: true, acknowledgedById: true },
   })

@@ -1,13 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { PageShell, PageHead } from '@/components/pitch';
-
-// ---------------------------------------------------------------------------
-// Types — mirrors /api/restaurant/floor response
-// TODO: import from src/lib/schemas/floor.ts once Michael ships it
-// ---------------------------------------------------------------------------
 
 type StaffOption = {
   id: string;
@@ -22,58 +17,144 @@ type FloorTable = {
   isActive: boolean;
 };
 
-// Mock data — TODO: replace with API fetch
-const MOCK_STAFF: StaffOption[] = [
-  { id: 's1', name: 'Jordan', role: 'STAFF' },
-  { id: 's2', name: 'Alex', role: 'STAFF' },
-  { id: 's3', name: 'Sam', role: 'MANAGER' },
-];
-
-const MOCK_TABLES: FloorTable[] = [
-  { id: 'tbl-1', tableNumber: '1', assignedStaffId: 's1', isActive: true },
-  { id: 'tbl-2', tableNumber: '2', assignedStaffId: 's1', isActive: true },
-  { id: 'tbl-3', tableNumber: '3', assignedStaffId: null, isActive: true },
-  { id: 'tbl-4', tableNumber: '4', assignedStaffId: 's2', isActive: true },
-  { id: 'tbl-5', tableNumber: '5', assignedStaffId: 's2', isActive: true },
-  { id: 'tbl-6', tableNumber: '6', assignedStaffId: null, isActive: true },
-  { id: 'tbl-7', tableNumber: 'Bar 1', assignedStaffId: 's3', isActive: true },
-];
+type FloorAssignmentDto = {
+  tableId: string;
+  staffId: string;
+  table: { tableNumber: string };
+};
 
 export default function FloorPage() {
   const [tables, setTables] = useState<FloorTable[]>([]);
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
   const [loadingYesterday, setLoadingYesterday] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
-  useEffect(() => {
-    // TODO: fetch from /api/restaurant/floor and /api/restaurant/staff
-    setTables(MOCK_TABLES);
-    setStaff(MOCK_STAFF);
-    setLoading(false);
+  const loadFloor = useCallback(async () => {
+    setLoadError('');
+    setLoading(true);
+    try {
+      const [tablesRes, floorRes, staffRes] = await Promise.all([
+        fetch('/api/restaurant/tables', { credentials: 'include' }),
+        fetch('/api/restaurant/floor', { credentials: 'include' }),
+        fetch('/api/restaurant/staff', { credentials: 'include' }),
+      ]);
+
+      if (!tablesRes.ok || !floorRes.ok) {
+        if (floorRes.status === 403 || staffRes.status === 403) {
+          setLoadError('You need Manager or Admin access to edit the floor.');
+        } else {
+          setLoadError('Could not load floor data.');
+        }
+        setTables([]);
+        setStaff([]);
+        return;
+      }
+
+      const { tables: dt } = (await tablesRes.json()) as {
+        tables: { id: string; tableNumber: string }[];
+      };
+      const { assignments } = (await floorRes.json()) as { assignments: FloorAssignmentDto[] };
+      const assignByTable = new Map<string, string>();
+      for (const a of assignments) {
+        if (!assignByTable.has(a.tableId)) assignByTable.set(a.tableId, a.staffId);
+      }
+
+      setTables(
+        dt.map((t) => ({
+          id: t.id,
+          tableNumber: t.tableNumber,
+          assignedStaffId: assignByTable.get(t.id) ?? null,
+          isActive: true,
+        })),
+      );
+
+      if (staffRes.ok) {
+        const staffData = (await staffRes.json()) as {
+          staff: { id: string; name: string; role: string; isActive: boolean }[];
+        };
+        setStaff(
+          staffData.staff
+            .filter((s) => s.isActive && (s.role === 'MANAGER' || s.role === 'STAFF'))
+            .map((s) => ({ id: s.id, name: s.name, role: s.role as 'MANAGER' | 'STAFF' })),
+        );
+      } else {
+        setStaff([]);
+      }
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadFloor();
+  }, [loadFloor]);
+
+  async function postAssignments(assignments: { tableId: string; staffId: string | null }[]) {
+    const res = await fetch('/api/restaurant/floor', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignments }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(typeof body.error === 'string' ? body.error : 'Save failed');
+    }
+  }
 
   async function assignStaff(tableId: string, staffId: string | null) {
     setSaving(tableId);
-    // TODO: POST /api/restaurant/tables/[tableId]/assign { staffId }
-    await new Promise((r) => setTimeout(r, 300));
-    setTables((prev) => prev.map((t) => (t.id === tableId ? { ...t, assignedStaffId: staffId } : t)));
-    setSaving(null);
+    setSuccessMsg('');
+    const nextTables = tables.map((t) =>
+      t.id === tableId ? { ...t, assignedStaffId: staffId || null } : t,
+    );
+    const assignments = nextTables.map((t) => ({
+      tableId: t.id,
+      staffId: t.assignedStaffId,
+    }));
+    try {
+      await postAssignments(assignments);
+      setTables(nextTables);
+    } catch (e) {
+      setSuccessMsg('');
+      alert(e instanceof Error ? e.message : 'Could not save assignment');
+      await loadFloor();
+    } finally {
+      setSaving(null);
+    }
   }
 
   async function loadYesterdaysSetup() {
     setLoadingYesterday(true);
-    // TODO: GET /api/restaurant/floor/yesterday → apply assignments
-    await new Promise((r) => setTimeout(r, 600));
-    setLoadingYesterday(false);
-    setSuccessMsg("Yesterday's floor setup loaded.");
-    setTimeout(() => setSuccessMsg(''), 3000);
-  }
-
-  function savePlan() {
-    setSuccessMsg('Save plan — TODO: wire API');
-    setTimeout(() => setSuccessMsg(''), 3000);
+    setSuccessMsg('');
+    try {
+      const res = await fetch('/api/restaurant/floor/yesterday', { credentials: 'include' });
+      if (!res.ok) {
+        alert('Could not load yesterday’s assignments.');
+        return;
+      }
+      const { assignments } = (await res.json()) as {
+        assignments: { tableId: string; staffId: string }[];
+      };
+      const map = new Map(assignments.map((a) => [a.tableId, a.staffId]));
+      const nextTables = tables.map((t) => ({
+        ...t,
+        assignedStaffId: map.get(t.id) ?? null,
+      }));
+      const payload = nextTables.map((t) => ({ tableId: t.id, staffId: t.assignedStaffId }));
+      await postAssignments(payload);
+      setTables(nextTables);
+      setSuccessMsg("Yesterday's floor setup loaded.");
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch {
+      alert('Could not apply yesterday’s setup.');
+      await loadFloor();
+    } finally {
+      setLoadingYesterday(false);
+    }
   }
 
   const unassigned = tables.filter((t) => !t.assignedStaffId);
@@ -97,21 +178,20 @@ export default function FloorPage() {
             <button
               type="button"
               onClick={loadYesterdaysSetup}
-              disabled={loadingYesterday}
+              disabled={loadingYesterday || tables.length === 0}
               className="rounded-full border border-border px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-primary hover:text-foreground disabled:opacity-50"
             >
               {loadingYesterday ? 'Loading...' : 'Load yesterday'}
             </button>
-            <button
-              type="button"
-              onClick={savePlan}
-              className="rounded-full bg-primary px-4 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-primary-foreground transition-colors hover:bg-amber-light"
-            >
-              Save plan
-            </button>
           </div>
         }
       />
+
+      {loadError && (
+        <p className="mb-4 rounded-[14px] border border-destructive/30 bg-destructive/10 px-4 py-3 font-body text-sm text-destructive">
+          {loadError}
+        </p>
+      )}
 
       {successMsg && (
         <p className="mb-4 rounded-[14px] border border-moss/40 bg-moss/10 px-4 py-3 font-body text-sm text-moss">
@@ -149,17 +229,17 @@ export default function FloorPage() {
                     <div className="tn">{table.tableNumber}</div>
                     <div className="as">
                       {!table.assignedStaffId
-                        ? 'No active session'
+                        ? 'Unassigned'
                         : `${assigned?.name ?? 'Server'} · ${assigned?.role === 'MANAGER' ? 'Manager' : 'Staff'}`}
                     </div>
                   </div>
                   <div className="mono mt-3 text-[10px]">
-                    {saving === table.id ? 'Saving...' : table.assignedStaffId ? 'Live' : 'Available'}
+                    {saving === table.id ? 'Saving...' : table.assignedStaffId ? 'Assigned' : 'Available'}
                   </div>
                   <select
                     value={table.assignedStaffId ?? ''}
                     onChange={(e) => assignStaff(table.id, e.target.value || null)}
-                    disabled={saving === table.id}
+                    disabled={saving === table.id || staff.length === 0}
                     className="mt-3 min-h-[40px] w-full rounded-lg border border-border bg-background px-2 py-1 font-body text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
                   >
                     <option value="">Unassigned</option>

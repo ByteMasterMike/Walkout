@@ -6,11 +6,11 @@ import { startOfDayInTz } from '@/lib/validate'
 
 const FloorAssignmentEntrySchema = z.object({
   tableId: z.string().uuid(),
-  staffId: z.string().uuid(),
+  staffId: z.string().uuid().nullable(),
 })
 
 const FloorLayoutSchema = z.object({
-  assignments: z.array(FloorAssignmentEntrySchema).min(1),
+  assignments: z.array(FloorAssignmentEntrySchema),
 })
 
 export async function GET() {
@@ -71,26 +71,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
   }
 
+  if (parsed.data.assignments.length === 0) {
+    return NextResponse.json({ assignments: [] }, { status: 200 })
+  }
+
   const { restaurantId } = session.user
   const tableIds = parsed.data.assignments.map((a) => a.tableId)
-  // Deduplicate staffIds — one server can cover multiple tables, so the same
-  // staffId appearing N times is valid and must not fail the count check.
-  const uniqueStaffIds = [...new Set(parsed.data.assignments.map((a) => a.staffId))]
+  const staffIdsNeedingCheck = parsed.data.assignments
+    .map((a) => a.staffId)
+    .filter((id): id is string => id !== null)
+  const uniqueStaffIds = [...new Set(staffIdsNeedingCheck)]
 
-  // Verify all tableIds and unique staffIds belong to this restaurant
+  // Verify all tableIds and unique staffIds (when assigned) belong to this restaurant
   const [tableCount, staffCount] = await Promise.all([
     prisma.diningTable.count({
       where: { id: { in: tableIds }, restaurantId },
     }),
-    prisma.restaurantStaff.count({
-      where: { id: { in: uniqueStaffIds }, restaurantId, isActive: true },
-    }),
+    uniqueStaffIds.length === 0
+      ? Promise.resolve(0)
+      : prisma.restaurantStaff.count({
+          where: { id: { in: uniqueStaffIds }, restaurantId, isActive: true },
+        }),
   ])
 
   if (tableCount !== tableIds.length) {
     return NextResponse.json({ error: 'One or more tables not found' }, { status: 422 })
   }
-  if (staffCount !== uniqueStaffIds.length) {
+  if (uniqueStaffIds.length > 0 && staffCount !== uniqueStaffIds.length) {
     return NextResponse.json({ error: 'One or more staff members not found' }, { status: 422 })
   }
 
@@ -102,12 +109,18 @@ export async function POST(request: Request) {
       data: { isActive: false, endedAt: new Date() },
     })
     return Promise.all(
-      parsed.data.assignments.map((a) =>
-        tx.tableAssignment.create({
-          data: { restaurantId, tableId: a.tableId, staffId: a.staffId },
-          select: { id: true, tableId: true, staffId: true, assignedAt: true },
-        })
-      )
+      parsed.data.assignments
+        .filter((a) => a.staffId !== null)
+        .map((a) =>
+          tx.tableAssignment.create({
+            data: {
+              restaurantId,
+              tableId: a.tableId,
+              staffId: a.staffId as string,
+            },
+            select: { id: true, tableId: true, staffId: true, assignedAt: true },
+          })
+        )
     )
   })
 
