@@ -180,7 +180,12 @@ export default function JoinPage() {
               <p className="text-sm text-gray-500 text-center py-4">Loading payment form…</p>
             ) : (
               <Elements stripe={stripePromise} options={{ clientSecret: setupClientSecret }}>
-                <JoinPaymentStep sessionId={sessionId} participantId={participantId} onDone={goToTab} />
+                <JoinPaymentStep
+                  sessionId={sessionId}
+                  participantId={participantId}
+                  setupClientSecret={setupClientSecret}
+                  onDone={goToTab}
+                />
               </Elements>
             )}
           </div>

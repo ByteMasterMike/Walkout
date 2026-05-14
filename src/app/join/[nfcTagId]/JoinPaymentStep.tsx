@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useCallback, useState } from 'react';
 import { useStripe, useElements, PaymentElement } from '@stripe/react-stripe-js';
 import type { StripePaymentElementOptions } from '@stripe/stripe-js';
 
@@ -11,9 +11,19 @@ const paymentElementOptions = {
   wallets: { applePay: 'never', googlePay: 'never', link: 'never' },
 } as unknown as StripePaymentElementOptions;
 
+function paymentMethodIdFromSetupIntent(pm: unknown): string | null {
+  if (typeof pm === 'string') return pm;
+  if (pm && typeof pm === 'object' && 'id' in pm && typeof (pm as { id: unknown }).id === 'string') {
+    return (pm as { id: string }).id;
+  }
+  return null;
+}
+
 type Props = {
   sessionId: string;
   participantId: string;
+  /** Needed to recover the saved PM when confirmSetup errors with setup_intent_unexpected_state (already succeeded). */
+  setupClientSecret: string;
   onDone: () => void;
 };
 
@@ -28,49 +38,17 @@ function formatStripeError(err: {
   return extra ? `${msg} (${extra})` : msg;
 }
 
-export default function JoinPaymentStep({ sessionId, participantId, onDone }: Props) {
+export default function JoinPaymentStep({ sessionId, participantId, setupClientSecret, onDone }: Props) {
   const stripe = useStripe();
   const elements = useElements();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** After confirmSetup succeeds, the SetupIntent is terminal — retries must only re-call /hold. */
+  const [confirmedPaymentMethodId, setConfirmedPaymentMethodId] = useState<string | null>(null);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!stripe || !elements) return;
-
-    setBusy(true);
-    try {
-      const { error: submitError } = await elements.submit();
-      if (submitError) {
-        setError(formatStripeError(submitError));
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[join-payment] elements.submit', submitError);
-        }
-        return;
-      }
-
-      const { error: confirmErr, setupIntent } = await stripe.confirmSetup({
-        elements,
-        redirect: 'if_required',
-      });
-
-      if (confirmErr) {
-        setError(formatStripeError(confirmErr));
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[join-payment] confirmSetup', confirmErr);
-        }
-        return;
-      }
-
-      const pm = setupIntent?.payment_method;
-      const stripePaymentMethodId =
-        typeof pm === 'string' ? pm : pm && typeof pm === 'object' && 'id' in pm ? (pm as { id: string }).id : null;
-
-      if (!stripePaymentMethodId) {
-        setError('Could not read payment method. Please try again.');
-        return;
-      }
+  const placeHold = useCallback(
+    async (stripePaymentMethodId: string) => {
+      if (!stripe) return;
 
       const res = await fetch(`/api/sessions/${sessionId}/hold`, {
         method: 'POST',
@@ -101,12 +79,75 @@ export default function JoinPaymentStep({ sessionId, participantId, onDone }: Pr
         setError(
           typeof parsed.error === 'string'
             ? parsed.error
-            : 'Could not place card hold. Please try again.'
+            : 'Could not place card hold. Please try again.',
         );
         return;
       }
 
       onDone();
+    },
+    [onDone, participantId, sessionId, stripe],
+  );
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!stripe) return;
+
+    setBusy(true);
+    try {
+      let pmId = confirmedPaymentMethodId;
+
+      if (!pmId) {
+        if (!elements) return;
+
+        const { error: submitError } = await elements.submit();
+        if (submitError) {
+          setError(formatStripeError(submitError));
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[join-payment] elements.submit', submitError);
+          }
+          return;
+        }
+
+        const { error: confirmErr, setupIntent } = await stripe.confirmSetup({
+          elements,
+          redirect: 'if_required',
+        });
+
+        if (!confirmErr) {
+          pmId = paymentMethodIdFromSetupIntent(setupIntent?.payment_method);
+        } else if (confirmErr.code === 'setup_intent_unexpected_state') {
+          // Usually means SetupIntent already succeeded (e.g. first click worked but /hold failed).
+          const retrieved = await stripe.retrieveSetupIntent(setupClientSecret);
+          if (retrieved.error) {
+            setError(formatStripeError(retrieved.error));
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('[join-payment] retrieveSetupIntent', retrieved.error);
+            }
+            return;
+          }
+          if (retrieved.setupIntent?.status === 'succeeded') {
+            pmId = paymentMethodIdFromSetupIntent(retrieved.setupIntent.payment_method);
+          }
+        }
+
+        if (!pmId) {
+          if (confirmErr) {
+            setError(formatStripeError(confirmErr));
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('[join-payment] confirmSetup', confirmErr);
+            }
+          } else {
+            setError('Could not read payment method. Please try again.');
+          }
+          return;
+        }
+
+        setConfirmedPaymentMethodId(pmId);
+      }
+
+      await placeHold(pmId);
     } finally {
       setBusy(false);
     }
