@@ -2,11 +2,18 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, type StripePaymentElementOptions } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { urlBase64ToUint8Array } from '@/lib/push/urlBase64';
 
 const pk = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+
+// `link: 'never'` is supported at runtime on Stripe.js for the Payment Element
+// but its TS type was only added in stripe/stripe-js#759 (post-v4.10). Cast so
+// we don't need to bump the SDK in this fix.
+const paymentElementOptions = {
+  wallets: { applePay: 'never', googlePay: 'never', link: 'never' },
+} as unknown as StripePaymentElementOptions;
 
 type Me = {
   email: string;
@@ -63,7 +70,7 @@ function CardSetupForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <PaymentElement />
+      <PaymentElement options={paymentElementOptions} />
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
         type="submit"

@@ -2,12 +2,31 @@
 
 import { FormEvent, useState } from 'react';
 import { useStripe, useElements, PaymentElement } from '@stripe/react-stripe-js';
+import type { StripePaymentElementOptions } from '@stripe/stripe-js';
+
+// `link: 'never'` is supported at runtime on Stripe.js for the Payment Element
+// but its TS type was only added in stripe/stripe-js#759 (post-v4.10). Cast so
+// we don't need to bump the SDK in this fix.
+const paymentElementOptions = {
+  wallets: { applePay: 'never', googlePay: 'never', link: 'never' },
+} as unknown as StripePaymentElementOptions;
 
 type Props = {
   sessionId: string;
   participantId: string;
   onDone: () => void;
 };
+
+/** Stripe.js errors often include `code` / `decline_code` beyond the generic `message`. */
+function formatStripeError(err: {
+  message?: string | null;
+  code?: string;
+  decline_code?: string;
+}): string {
+  const msg = err.message?.trim() || 'Something went wrong.';
+  const extra = [err.code, err.decline_code].filter(Boolean).join(' · ');
+  return extra ? `${msg} (${extra})` : msg;
+}
 
 export default function JoinPaymentStep({ sessionId, participantId, onDone }: Props) {
   const stripe = useStripe();
@@ -22,13 +41,25 @@ export default function JoinPaymentStep({ sessionId, participantId, onDone }: Pr
 
     setBusy(true);
     try {
+      const { error: submitError } = await elements.submit();
+      if (submitError) {
+        setError(formatStripeError(submitError));
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[join-payment] elements.submit', submitError);
+        }
+        return;
+      }
+
       const { error: confirmErr, setupIntent } = await stripe.confirmSetup({
         elements,
         redirect: 'if_required',
       });
 
       if (confirmErr) {
-        setError(confirmErr.message ?? 'Payment setup failed.');
+        setError(formatStripeError(confirmErr));
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[join-payment] confirmSetup', confirmErr);
+        }
         return;
       }
 
@@ -56,7 +87,10 @@ export default function JoinPaymentStep({ sessionId, participantId, onDone }: Pr
       if (parsed.status === 'requires_action' && parsed.clientSecret) {
         const { error: piErr } = await stripe.confirmCardPayment(parsed.clientSecret);
         if (piErr) {
-          setError(piErr.message ?? 'Authentication failed.');
+          setError(formatStripeError(piErr));
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[join-payment] confirmCardPayment', piErr);
+          }
           return;
         }
         onDone();
@@ -80,7 +114,7 @@ export default function JoinPaymentStep({ sessionId, participantId, onDone }: Pr
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
+      <PaymentElement options={paymentElementOptions} />
       {error && (
         <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
       )}
