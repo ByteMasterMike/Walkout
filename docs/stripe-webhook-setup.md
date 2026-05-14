@@ -12,7 +12,11 @@
 3. Select events (minimum):
    - `payment_intent.succeeded`
    - `payment_intent.payment_failed`
-4. After creation, reveal **Signing secret** (`whsec_...`) and add it to Vercel project env as `STRIPE_WEBHOOK_SECRET` (and locally in `.env.local`).
+   - `account.updated` — required so `Restaurant.stripeConnectOnboarded` flips to `true` automatically when a connected Express account finishes onboarding (and back to `false` if Stripe later restricts charges).
+4. In the same webhook config, also check **Listen to events on Connected accounts** so `account.updated` events for connected Express accounts (not just the platform account) reach this endpoint.
+5. After creation, reveal **Signing secret** (`whsec_...`) and add it to Vercel project env as `STRIPE_WEBHOOK_SECRET` (and locally in `.env.local`).
+
+> Without `account.updated`, the dashboard will keep showing "Onboarding incomplete" even after Stripe verifies the restaurant. The dashboard setup page does an extra on-demand refresh as a fallback (and exposes a *Re-check status* button), but the webhook is the durable path.
 
 ## Env file
 

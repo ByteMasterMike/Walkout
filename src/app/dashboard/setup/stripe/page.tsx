@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { refreshConnectStatus } from '@/lib/stripe/refreshConnectStatus';
 import StripeConnectClient from './StripeConnectClient';
 import { PageShell, PageHead } from '@/components/pitch';
 
@@ -15,6 +16,8 @@ export default async function StripeSetupPage({
   }
 
   const params = await searchParams;
+  const returnedSuccess = params.success === '1';
+  const returnedRefresh = params.refresh === '1';
 
   let restaurant: { stripeConnectAccountId: string | null; stripeConnectOnboarded: boolean } | null = null;
   try {
@@ -26,10 +29,24 @@ export default async function StripeSetupPage({
     // Fall through — treat as not onboarded
   }
 
-  const isOnboarded = restaurant?.stripeConnectOnboarded ?? false;
+  // If the admin just came back from Stripe (`?success=1`), or there is an
+  // account that we still think is unfinished, sync the flag from Stripe so
+  // the banner reflects reality on the first paint instead of stale DB state.
+  let requirementsCurrentlyDue: string[] = [];
+  let disabledReason: string | null = null;
+  let isOnboarded = restaurant?.stripeConnectOnboarded ?? false;
   const hasAccount = !!restaurant?.stripeConnectAccountId;
-  const returnedSuccess = params.success === '1';
-  const returnedRefresh = params.refresh === '1';
+
+  if (hasAccount && (returnedSuccess || !isOnboarded)) {
+    try {
+      const status = await refreshConnectStatus({ restaurantId: session.user.restaurantId });
+      isOnboarded = status.onboarded;
+      requirementsCurrentlyDue = status.requirementsCurrentlyDue;
+      disabledReason = status.disabledReason;
+    } catch (err) {
+      console.error('[stripe-setup] refreshConnectStatus failed:', err);
+    }
+  }
 
   return (
     <PageShell>
@@ -52,6 +69,8 @@ export default async function StripeSetupPage({
         hasAccount={hasAccount}
         returnedSuccess={returnedSuccess}
         returnedRefresh={returnedRefresh}
+        requirementsCurrentlyDue={requirementsCurrentlyDue}
+        disabledReason={disabledReason}
       />
 
       <div className="mt-10 border-t border-border pt-8">

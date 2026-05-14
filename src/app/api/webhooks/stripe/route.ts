@@ -8,6 +8,7 @@ import { sendUrgentNotification } from '@/lib/notify/sendUrgent';
 import { prisma } from '@/lib/prisma';
 import { stripe } from '@/lib/stripe';
 import { allocateFee } from '@/lib/payment/capture';
+import { applyConnectAccountUpdate } from '@/lib/stripe/refreshConnectStatus';
 
 function appUrl(): string {
   return process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
@@ -78,6 +79,15 @@ export async function POST(request: Request) {
     case 'payment_intent.payment_failed': {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       await handlePaymentFailed(paymentIntent);
+      break;
+    }
+
+    case 'account.updated': {
+      // Sent for the platform account and (when "events on Connect accounts"
+      // is enabled in the webhook config) for connected Express accounts.
+      // Keeps `Restaurant.stripeConnectOnboarded` in sync without polling.
+      const account = event.data.object as Stripe.Account;
+      await applyConnectAccountUpdate(account);
       break;
     }
 

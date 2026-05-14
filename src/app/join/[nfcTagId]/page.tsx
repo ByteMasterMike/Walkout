@@ -68,6 +68,19 @@ export default function JoinPage() {
       return;
     }
 
+    // No setupClientSecret means the restaurant's Stripe account is not finished.
+    // Do NOT silently route to /tab — the diner would land in the menu with no
+    // card on file and no auth hold, which breaks the WalkOut model. Show a
+    // clear error and let staff fix Stripe before continuing.
+    if (pk) {
+      setError(
+        "This table can't take a card right now. Please ask your server — payments are still being set up.",
+      );
+      setLoading(false);
+      return;
+    }
+
+    // Local/dev fallback only: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY missing.
     router.push(`/tab/${data.sessionId}`);
     setLoading(false);
   }

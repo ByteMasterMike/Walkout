@@ -7,12 +7,14 @@ import { stripe } from '@/lib/stripe';
  * POST /api/restaurant/stripe/connect — ADMIN only
  *
  * Creates (or retrieves) a Stripe Express connected account for the restaurant
- * and returns an onboarding link URL. The cofounder's UI redirects the ADMIN
- * to this URL to complete Stripe's hosted onboarding flow (~5 min).
+ * and returns an onboarding link URL. The ADMIN is redirected to this URL to
+ * complete Stripe's hosted onboarding flow (~5 min).
  *
- * After onboarding, Stripe redirects back to the returnUrl with the account ID
- * in the query string. A separate completion route (or webhook) persists
- * stripeConnectAccountId and sets stripeConnectOnboarded = true.
+ * After onboarding, Stripe redirects back to the returnUrl with `?success=1`.
+ * The dashboard page server-side calls `refreshConnectStatus` to sync
+ * `stripeConnectOnboarded` from `account.charges_enabled && details_submitted`.
+ * The `account.updated` webhook handler keeps the flag in sync going forward.
+ * See `src/lib/stripe/refreshConnectStatus.ts` and `docs/stripe-webhook-setup.md`.
  *
  * PRD §11.3: every PaymentIntent must include on_behalf_of: connectAccountId.
  * Without an onboarded account the hold cannot be created.
