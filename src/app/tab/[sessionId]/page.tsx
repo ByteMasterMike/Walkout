@@ -8,7 +8,6 @@ import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { useIdleWarning } from '@/hooks/useIdleWarning';
 import IdleWarningToast from '@/components/IdleWarningToast';
 import { useSessionStream } from '@/hooks/useSessionStream';
-import { PhoneFrame } from '@/components/pitch';
 import { SearchGlyphIcon } from '@/components/icons/prototype';
 
 type MenuItemData = {
@@ -305,19 +304,8 @@ function TabPageInner() {
 
   const activeOrders = orders.filter((o) => o.status !== 'CANCELLED');
 
-  const flowSteps = useMemo(
-    () => [
-      { n: '01', label: 'Tap NFC', active: holdStatus === 'NONE' || holdStatus === 'PENDING' },
-      { n: '02', label: 'Hold placed', active: holdStatus === 'HELD' },
-      { n: '03', label: 'Browse menu', active: holdStatus === 'HELD' },
-      { n: '04', label: 'Your tab', active: activeOrders.length > 0 },
-      { n: '05', label: 'Pay & leave', active: false },
-    ],
-    [holdStatus, activeOrders.length],
-  );
+  const hasPublishedMenu = categories.length > 0;
 
-  const menuRef = useRef<HTMLDivElement>(null);
-  const tabRef = useRef<HTMLDivElement>(null);
   const subtotal = activeOrders.reduce(
     (sum, o) => sum.plus(new Decimal(o.unitPrice).times(o.quantity)),
     new Decimal(0),
@@ -443,33 +431,9 @@ function TabPageInner() {
   return (
     <>
       <div className="min-h-screen bg-background">
-        <div className="diner-page mx-auto max-w-[1400px] px-4 pb-8 pt-4 lg:px-8">
-          <aside className="diner-rail hidden lg:block">
-            <div className="mono-am mb-2">N° 01 — The sequence</div>
-            <h2>
-              Your <em>tab</em>
-            </h2>
-            <p>Order from the menu, track your check, and leave when you&apos;re ready.</p>
-            <nav className="flow-nav" aria-label="Tab steps">
-              {flowSteps.map((s) => (
-                <button
-                  key={s.n}
-                  type="button"
-                  className={s.active ? 'on' : ''}
-                  onClick={() => {
-                    if (s.label === 'Browse menu') menuRef.current?.scrollIntoView({ behavior: 'smooth' });
-                    if (s.label === 'Your tab') tabRef.current?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                >
-                  <span className="n">{s.n}</span>
-                  <span>{s.label}</span>
-                </button>
-              ))}
-            </nav>
-          </aside>
-
-          <PhoneFrame>
-            <header className="mb-3 flex items-center justify-between gap-3">
+        <main className="mx-auto w-full max-w-[1100px] px-4 pt-4 pb-32 lg:px-8 lg:pb-28">
+          <div className="sticky top-0 z-20 -mx-4 mb-3 border-b border-gray-100/90 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:-mx-8 lg:px-8">
+            <header className="flex items-center justify-between gap-3">
               <div className="d-pill !max-w-[85%]">
                 <span className="dot" />
                 <span className="truncate">
@@ -479,7 +443,7 @@ function TabPageInner() {
               <button
                 type="button"
                 onClick={() => setShowSearch((v) => !v)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--p-muted)] transition-colors hover:bg-white/5"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100"
                 aria-label="Search menu"
               >
                 <SearchGlyphIcon />
@@ -487,7 +451,7 @@ function TabPageInner() {
             </header>
 
             {showSearch && (
-              <div className="d-search mb-2">
+              <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-gray-400">
                 <SearchGlyphIcon />
                 <input
                   autoFocus
@@ -495,13 +459,14 @@ function TabPageInner() {
                   placeholder="Search menu..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="min-w-0 flex-1 border-0 bg-transparent font-body text-sm text-[var(--p-text)] placeholder:text-[var(--p-muted)] focus:outline-none"
+                  className="min-w-0 flex-1 border-0 bg-transparent font-body text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none"
                 />
               </div>
             )}
+          </div>
 
       {!bannerDismissed && (
-        <div className="mx-4 mt-4 bg-gray-900 text-white rounded-xl p-4">
+        <div className="mt-4 bg-gray-900 text-white rounded-xl p-4">
           <p className="text-sm font-semibold mb-1">How WalkOut Works</p>
           <ol className="text-xs text-gray-300 space-y-1 list-decimal list-inside">
             <li>Order right from this page</li>
@@ -519,7 +484,7 @@ function TabPageInner() {
       )}
 
       {holdFailed && (
-        <div className="sticky top-14 z-10 mx-0 bg-red-600 text-white px-4 py-3 flex items-start gap-3">
+        <div className="mt-4 rounded-xl bg-red-600 text-white px-4 py-3 flex items-start gap-3">
           <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
           </svg>
@@ -533,7 +498,7 @@ function TabPageInner() {
       )}
 
       {holdStatus === 'HELD' && (
-        <div className="mx-4 mt-4 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
+        <div className="mt-4 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
           <svg className="w-4 h-4 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
@@ -543,11 +508,11 @@ function TabPageInner() {
         </div>
       )}
 
-      <div ref={menuRef}>
+      <div>
         {popularItems.length > 0 && (
           <div className="mt-6">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Featured</p>
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
               {popularItems.map((item) => (
                 <button
                   key={item.id}
@@ -559,14 +524,14 @@ function TabPageInner() {
                     }
                   }}
                   disabled={holdFailed}
-                  className={`shrink-0 w-36 bg-white border border-gray-200 rounded-xl p-3 text-left transition-colors ${holdFailed ? 'opacity-40 cursor-not-allowed' : 'hover:border-gray-400'}`}
+                  className={`shrink-0 w-36 lg:w-44 bg-white border border-gray-200 rounded-xl p-3 text-left transition-colors ${holdFailed ? 'opacity-40 cursor-not-allowed' : 'hover:border-gray-400'}`}
                 >
                   {item.imageUrl ? (
-                    <div className="w-full h-20 rounded-lg bg-gray-100 overflow-hidden mb-2">
+                    <div className="w-full h-20 lg:h-24 rounded-lg bg-gray-100 overflow-hidden mb-2">
                       <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                     </div>
                   ) : (
-                    <div className="w-full h-20 rounded-lg bg-gray-100 mb-2" />
+                    <div className="w-full h-20 lg:h-24 rounded-lg bg-gray-100 mb-2" />
                   )}
                   <p className="text-xs font-semibold text-gray-900 line-clamp-1">{item.name}</p>
                   <p className="text-xs text-gray-500 mt-0.5">${item.price}</p>
@@ -576,7 +541,8 @@ function TabPageInner() {
           </div>
         )}
 
-        <div className="flex gap-2 mt-6 overflow-x-auto pb-1 -mx-4 px-4">
+        {hasPublishedMenu && (
+        <div className="flex gap-2 mt-6 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0">
           <button
             type="button"
             onClick={() => setSelectedCategory(null)}
@@ -603,14 +569,47 @@ function TabPageInner() {
             </button>
           ))}
         </div>
+        )}
 
         {filteredCategories.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-10">No items found.</p>
+          !hasPublishedMenu ? (
+            <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-6 text-center">
+              <p className="text-sm font-semibold text-gray-900">Menu coming soon</p>
+              <p className="mt-2 text-sm text-gray-600">
+                This restaurant is still setting up their digital menu. Ask your server to order or for a paper menu —
+                we&apos;ll show items here as soon as they&apos;re published.
+              </p>
+              <button
+                type="button"
+                disabled={holdFailed || sendingRequest === 'SPEAK_TO_SERVER'}
+                onClick={() => void sendServiceRequest('SPEAK_TO_SERVER')}
+                className="mt-4 w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50 sm:w-auto sm:min-w-[240px]"
+              >
+                {sendingRequest === 'SPEAK_TO_SERVER' ? 'Sending...' : 'Speak to your server'}
+              </button>
+            </div>
+          ) : (
+            <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 px-5 py-6 text-center">
+              <p className="text-sm font-medium text-gray-900">No items match your search</p>
+              <p className="mt-1 text-sm text-gray-500">Try different words or clear your search.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setSelectedCategory(null);
+                  setShowSearch(false);
+                }}
+                className="mt-4 text-sm font-semibold text-gray-900 underline underline-offset-2 hover:text-gray-700"
+              >
+                Clear search and filters
+              </button>
+            </div>
+          )
         ) : (
           filteredCategories.map((cat) => (
             <div key={cat.id} className="mt-6">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{cat.name}</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-4">
                 {cat.items.map((item) => (
                   <button
                     key={item.id}
@@ -625,11 +624,11 @@ function TabPageInner() {
                     className={`bg-white border border-gray-200 rounded-xl p-3 text-left transition-colors ${holdFailed ? 'opacity-40 cursor-not-allowed' : 'hover:border-gray-400'}`}
                   >
                     {item.imageUrl ? (
-                      <div className="w-full h-24 rounded-lg bg-gray-100 overflow-hidden mb-2">
+                      <div className="w-full h-24 lg:h-32 rounded-lg bg-gray-100 overflow-hidden mb-2">
                         <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                       </div>
                     ) : (
-                      <div className="w-full h-24 rounded-lg bg-gray-100 mb-2" />
+                      <div className="w-full h-24 lg:h-32 rounded-lg bg-gray-100 mb-2" />
                     )}
                     <p className="text-xs font-semibold text-gray-900 line-clamp-2">{item.name}</p>
                     <p className="text-xs text-gray-500 mt-0.5">${item.price}</p>
@@ -652,9 +651,13 @@ function TabPageInner() {
           ))
         )}
 
-        <div className="mt-8" ref={tabRef}>
+        <div className="mt-8">
           {activeOrders.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">No items yet. Browse the menu above.</p>
+            <p className="text-sm text-gray-400 py-4 text-center">
+              {!hasPublishedMenu
+                ? 'When the menu is live, your orders will show up here.'
+                : 'No items yet. Browse the menu above.'}
+            </p>
           ) : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
               {activeOrders.map((order) => (
@@ -755,25 +758,42 @@ function TabPageInner() {
           )}
         </div>
       </div>
-          </PhoneFrame>
-        </div>
+        </main>
       </div>
 
       {sessionRow.status === 'OPEN' && !holdFailed && sessionId && (
         <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-gray-200 bg-white/95 backdrop-blur px-4 py-3 pb-safe">
-          <Link
-            href={`/tab/${sessionId}/pay`}
-            className="flex h-12 w-full items-center justify-center rounded-xl bg-gray-900 text-sm font-semibold text-white hover:bg-gray-800"
-          >
-            Ready to leave
-          </Link>
+          <div className="mx-auto flex max-w-[1100px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            {activeOrders.length > 0 ? (
+              <p className="text-center text-sm text-gray-700 sm:text-left">
+                <span className="font-medium">Subtotal ${subtotal.toFixed(2)}</span>
+                <span className="mx-2 text-gray-400">·</span>
+                <span className="font-semibold text-gray-900">Total ${total.toFixed(2)}</span>
+              </p>
+            ) : (
+              <p className="hidden text-sm text-gray-500 sm:block sm:max-w-md">
+                Browse the menu, then tap <span className="font-medium text-gray-700">Ready to leave</span> when
+                you&apos;re done.
+              </p>
+            )}
+            <Link
+              href={`/tab/${sessionId}/pay`}
+              className="flex h-12 min-h-[48px] w-full shrink-0 items-center justify-center rounded-xl bg-gray-900 text-sm font-semibold text-white hover:bg-gray-800 sm:w-auto sm:min-w-[200px]"
+            >
+              Ready to leave
+            </Link>
+          </div>
         </div>
       )}
 
       {isIdle && <IdleWarningToast onDismiss={resetIdle} />}
 
       {requestToast && !isIdle && (
-        <div className="fixed bottom-6 left-4 right-4 z-50 bg-gray-900 text-white text-xs rounded-xl px-4 py-3 text-center shadow-lg">
+        <div
+          className={`fixed left-4 right-4 z-50 bg-gray-900 text-white text-xs rounded-xl px-4 py-3 text-center shadow-lg ${
+            sessionRow.status === 'OPEN' && !holdFailed ? 'bottom-24' : 'bottom-6'
+          }`}
+        >
           {requestToast}
         </div>
       )}
