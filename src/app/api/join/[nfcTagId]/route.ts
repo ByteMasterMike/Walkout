@@ -66,21 +66,25 @@ export async function POST(
     return NextResponse.json({ error: 'Table not found' }, { status: 404 });
   }
 
-  // Race-condition-safe session creation: try to find active session first,
-  // then create one if none exists, catching P2002 from the partial unique index.
+  // New diners only join OPEN tabs. Checkout-phase rows (AWAITING_TIP, etc.) stay on /pay;
+  // without this filter, NFC join would attach guests to the wrong session and /tab redirects to pay.
+  // Race-condition-safe: find OPEN → else create, catch P2002 from `one_active_session_per_table`,
+  // refetch OPEN only (never reuse CLOSING/CAPTURING for a fresh join).
+  const openWhere = { tableId: table.id, status: 'OPEN' as const };
   let session = await prisma.tabSession.findFirst({
-    where: { tableId: table.id, status: { in: ['OPEN', 'AWAITING_TIP', 'CAPTURING', 'CLOSING'] } },
+    where: openWhere,
+    orderBy: { updatedAt: 'desc' },
     select: { id: true, hostParticipantId: true },
   });
 
   if (!session) {
+    let lostRaceToUniqueIndex = false;
     try {
       session = await prisma.tabSession.create({
         data: { tableId: table.id, restaurantId: table.restaurantId },
         select: { id: true, hostParticipantId: true },
       });
     } catch (err: unknown) {
-      // P2002 = unique constraint violation from `one_active_session_per_table` index
       const isUniqueViolation =
         typeof err === 'object' &&
         err !== null &&
@@ -88,16 +92,29 @@ export async function POST(
         (err as { code: string }).code === 'P2002';
 
       if (isUniqueViolation) {
-        // Re-fetch the session that won the race
+        lostRaceToUniqueIndex = true;
         session = await prisma.tabSession.findFirst({
-          where: { tableId: table.id, status: { in: ['OPEN', 'AWAITING_TIP', 'CAPTURING', 'CLOSING'] } },
+          where: openWhere,
+          orderBy: { updatedAt: 'desc' },
           select: { id: true, hostParticipantId: true },
         });
-      }
-
-      if (!session) {
+      } else {
+        console.error('[join] TabSession create failed:', err);
         return NextResponse.json({ error: 'Could not create session' }, { status: 500 });
       }
+    }
+
+    if (!session) {
+      if (lostRaceToUniqueIndex) {
+        return NextResponse.json(
+          {
+            error:
+              'This table is still finishing the previous check. Please ask your server for assistance.',
+          },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: 'Could not create session' }, { status: 500 });
     }
   }
 
