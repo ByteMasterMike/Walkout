@@ -22,8 +22,16 @@ export default function JoinPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [setupClientSecret, setSetupClientSecret] = useState<string | null>(null);
+  const [stripeConnectAccountId, setStripeConnectAccountId] = useState<string | null>(null);
 
-  const stripePromise = useMemo(() => (pk ? loadStripe(pk) : null), []);
+  // Stripe.js must be initialised with the same `stripeAccount` the SetupIntent
+  // was created on, otherwise the PaymentElement silently fails to mount.
+  // We can't build this eagerly because we only learn the connected account
+  // id from the join response.
+  const stripePromise = useMemo(() => {
+    if (!pk || !stripeConnectAccountId) return null;
+    return loadStripe(pk, { stripeAccount: stripeConnectAccountId });
+  }, [stripeConnectAccountId]);
 
   async function handleJoin(e: React.FormEvent) {
     e.preventDefault();
@@ -47,6 +55,7 @@ export default function JoinPage() {
       sessionId: string;
       participantId: string;
       setupClientSecret: string | null;
+      stripeConnectAccountId: string | null;
       nextStep?: string;
     };
 
@@ -61,8 +70,9 @@ export default function JoinPage() {
 
     const needsPayment = Boolean(data.setupClientSecret && data.nextStep === 'payment');
 
-    if (needsPayment && data.setupClientSecret) {
+    if (needsPayment && data.setupClientSecret && data.stripeConnectAccountId) {
       setSetupClientSecret(data.setupClientSecret);
+      setStripeConnectAccountId(data.stripeConnectAccountId);
       setStep('payment');
       setLoading(false);
       return;
@@ -152,25 +162,27 @@ export default function JoinPage() {
         {step === 'payment' && setupClientSecret && sessionId && participantId && (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-gray-900 text-center">Add a payment method</h2>
-            {!stripePromise || !pk ? (
-              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                Stripe is not configured (missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY). You can continue to your tab —
-                ordering may be limited until a card is on file.
-              </p>
+            {!pk ? (
+              <>
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Stripe is not configured (missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY). You can continue to your tab
+                  — ordering may be limited until a card is on file.
+                </p>
+                <button
+                  type="button"
+                  onClick={goToTab}
+                  className="w-full border border-gray-300 rounded-lg py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Continue without card
+                </button>
+              </>
+            ) : !stripePromise || !stripeConnectAccountId ? (
+              <p className="text-sm text-gray-500 text-center py-4">Loading payment form…</p>
             ) : (
               <Elements stripe={stripePromise} options={{ clientSecret: setupClientSecret }}>
                 <JoinPaymentStep sessionId={sessionId} participantId={participantId} onDone={goToTab} />
               </Elements>
             )}
-            {!stripePromise || !pk ? (
-              <button
-                type="button"
-                onClick={goToTab}
-                className="w-full border border-gray-300 rounded-lg py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Continue without card
-              </button>
-            ) : null}
           </div>
         )}
 

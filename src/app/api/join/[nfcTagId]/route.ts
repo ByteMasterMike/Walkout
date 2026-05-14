@@ -226,6 +226,11 @@ export async function POST(
     // setupClientSecret is null when restaurant has not yet connected Stripe.
     // Client shows the payment sheet when non-null; skips it when null.
     setupClientSecret,
+    // The SetupIntent above is scoped to the connected account, so the diner's
+    // Stripe.js must be initialised with the same `stripeAccount` for the
+    // PaymentElement to load. Return null when there's no payment step so the
+    // client can fall back to a clear error rather than mounting a broken sheet.
+    stripeConnectAccountId: setupClientSecret ? table.stripeConnectAccountId : null,
     nextStep: setupClientSecret ? 'payment' : 'tab',
   });
 }
