@@ -176,10 +176,16 @@ export async function POST(
         payment_method: stripePaymentMethodId,
         capture_method: 'manual',
         confirm: true,
-        off_session: true,
-        on_behalf_of: restaurant.stripeConnectAccountId,
-        application_fee_amount: 0, // No fee on hold — fee fires at capture only (§11.3)
+        // User is on-session here (just clicked "Save card & place hold").
+        // off_session: true is for later automatic retries, not the first auth hold —
+        // sending it now makes Stripe surface non-card errors (e.g. authentication_required)
+        // instead of going through the friendly card-decline path.
         metadata: { sessionId, participantId, type: 'auth_hold' },
+        // application_fee_amount intentionally omitted — Stripe requires it to be
+        // positive when present; fees are taken at capture time, not at hold time (§11.3).
+        // on_behalf_of intentionally omitted — this is a direct charge on the
+        // connected account (Stripe-Account header), so the merchant of record
+        // is already that account.
       },
       {
         idempotencyKey: `hold-${participantId}-${newHoldAttempt}`,
@@ -187,8 +193,15 @@ export async function POST(
       }
     );
   } catch (err: unknown) {
-    // Stripe card error (card_declined, insufficient_funds, etc.)
-    const stripeError = err as { type?: string; code?: string; message?: string };
+    const stripeError = err as {
+      type?: string;
+      code?: string;
+      decline_code?: string;
+      param?: string;
+      message?: string;
+      requestId?: string;
+    };
+
     if (stripeError.type === 'StripeCardError') {
       await prisma.tabParticipant.update({
         where: { id: participantId },
@@ -196,9 +209,23 @@ export async function POST(
       });
       return NextResponse.json({ status: 'failed', error: 'Card declined' }, { status: 402 });
     }
-    // Any other Stripe error (network, API, etc.) — log server-side, do not expose details
-    console.error('[hold] Stripe error:', stripeError.message);
-    return NextResponse.json({ error: 'Payment processing failed' }, { status: 500 });
+
+    console.error('[hold] Stripe error', {
+      type: stripeError.type,
+      code: stripeError.code,
+      param: stripeError.param,
+      decline_code: stripeError.decline_code,
+      requestId: stripeError.requestId,
+      message: stripeError.message,
+    });
+
+    // In non-production, include the Stripe code so we can debug without server logs.
+    const safeError =
+      process.env.NODE_ENV === 'production'
+        ? 'Payment processing failed'
+        : `Payment processing failed (${stripeError.code ?? stripeError.type ?? 'unknown'})`;
+
+    return NextResponse.json({ error: safeError }, { status: 500 });
   }
 
   // ── Handle PaymentIntent status ───────────────────────────────────────────
