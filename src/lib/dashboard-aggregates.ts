@@ -93,6 +93,9 @@ export async function getRestaurantDashboardAggregates(restaurantId: string): Pr
     prisma.tabParticipant.count({
       where: {
         holdStatus: { in: ['PENDING', 'HELD'] },
+        // Paid-out tabs should show hold RELEASED; if DB ever drifts (CAPTURED + HELD),
+        // don't inflate this KPI — staff care about auth holds that still block checkout.
+        captureStatus: { notIn: ['CAPTURED', 'SKIPPED'] },
         session: { restaurantId, status: { in: ['OPEN', 'AWAITING_TIP', 'CAPTURING', 'CLOSING'] } },
       },
     }),
