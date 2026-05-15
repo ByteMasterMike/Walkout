@@ -29,6 +29,8 @@ const nextConfig: NextConfig = {
               // style-src-elem in Chromium; without it, fonts.googleapis.com/css2 can be blocked despite style-src.
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              // Prefetches/preloads for font/CSS URLs otherwise fall back to default-src ('self') only.
+              "prefetch-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://js.stripe.com https://*.stripe.com https://m.stripe.network https://*.stripe.network",
               "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: blob: https://images.walkoutofficial.com https://*.stripe.com",
               "media-src 'self'",

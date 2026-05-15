@@ -21,9 +21,23 @@ function paymentDebugEnabled(): boolean {
   );
 }
 
-/** Normalize Stripe Node SDK throws (`code`/`param` often live on `raw`). */
+/** Redact Stripe-style ids so we can safely surface API messages in production. */
+function redactStripeIds(input: string): string {
+  return input.replace(
+    /\b(?:cus|acct|pm|pi|card|tok|seti|sess|req|src|link|bank|card)_[A-Za-z0-9]+\b/gi,
+    '[redacted]'
+  );
+}
+
+/**
+ * Normalize Stripe Node SDK throws. `error.raw` IS the API error object (`invalid_request_error`, …);
+ * RequestSender also merges `headers`, `statusCode`, and `requestId` onto that same object (camelCase).
+ */
 function normalizeStripeThrown(err: unknown): {
-  type?: string;
+  /** `StripeCardError` / `StripeInvalidRequestError` — use for branching only */
+  sdkClassName?: string;
+  /** Stripe API `type`, e.g. `invalid_request_error` */
+  apiErrorType?: string;
   code?: string;
   decline_code?: string;
   message?: string;
@@ -35,34 +49,73 @@ function normalizeStripeThrown(err: unknown): {
 } {
   if (!err || typeof err !== 'object') return {};
   const e = err as Record<string, unknown>;
-  const raw =
-    e.raw && typeof e.raw === 'object' && !Array.isArray(e.raw)
-      ? (e.raw as Record<string, unknown>)
-      : {};
-  const inner =
-    raw.error && typeof raw.error === 'object' && !Array.isArray(raw.error)
-      ? (raw.error as Record<string, unknown>)
-      : {};
-  const pickStr = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : undefined);
-  const pickNum = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+  let rawObj: Record<string, unknown> | undefined;
+  if (typeof e.raw === 'object' && e.raw !== null && !Array.isArray(e.raw)) {
+    rawObj = e.raw as Record<string, unknown>;
+  } else if (typeof e.raw === 'string') {
+    try {
+      const parsed = JSON.parse(e.raw) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) rawObj = parsed as Record<string, unknown>;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const oauthNested =
+    rawObj?.error && typeof rawObj.error === 'object' && !Array.isArray(rawObj.error)
+      ? (rawObj.error as Record<string, unknown>)
+      : undefined;
+
+  const sources: Record<string, unknown>[] = [e];
+  if (rawObj) sources.push(rawObj);
+  if (oauthNested) sources.push(oauthNested);
+
+  const pickStrKeys = (keys: string[]) => {
+    for (const key of keys) {
+      for (const s of sources) {
+        const v = s[key];
+        if (typeof v === 'string' && v.length > 0) return v;
+      }
+    }
+    return undefined;
+  };
+
+  const pickNumKeys = (keys: string[]) => {
+    for (const key of keys) {
+      for (const s of sources) {
+        const v = s[key];
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+      }
+    }
+    return undefined;
+  };
+
+  const sdkClassName = typeof e.type === 'string' && e.type.length > 0 ? e.type : undefined;
+  const apiErrorType =
+    (typeof e.rawType === 'string' && e.rawType.length > 0 ? e.rawType : undefined) ??
+    (rawObj && typeof rawObj.type === 'string' ? rawObj.type : undefined) ??
+    (oauthNested && typeof oauthNested.type === 'string' ? oauthNested.type : undefined);
 
   return {
-    type: pickStr(e.type),
-    code: pickStr(e.code) ?? pickStr(inner.code) ?? pickStr(raw.code),
-    decline_code: pickStr(e.decline_code) ?? pickStr(inner.decline_code) ?? pickStr(raw.decline_code),
-    message: pickStr(e.message) ?? pickStr(inner.message) ?? pickStr(raw.message),
-    requestId: pickStr(e.requestId) ?? pickStr(raw.request_id),
-    param: pickStr(e.param) ?? pickStr(inner.param) ?? pickStr(raw.param),
-    detail: pickStr(e.detail) ?? pickStr(inner.detail) ?? pickStr(raw.detail),
-    doc_url: pickStr(e.doc_url) ?? pickStr(inner.doc_url) ?? pickStr(raw.doc_url),
-    statusCode: pickNum(e.statusCode),
+    sdkClassName,
+    apiErrorType,
+    code: pickStrKeys(['code']),
+    decline_code: pickStrKeys(['decline_code']),
+    message: pickStrKeys(['message']),
+    requestId: pickStrKeys(['requestId', 'request_id']),
+    param: pickStrKeys(['param']),
+    detail: pickStrKeys(['detail']),
+    doc_url: pickStrKeys(['doc_url']),
+    statusCode: pickNumKeys(['statusCode', 'status']),
   };
 }
 
 /** Stripe codes/types are safe to surface to the browser; raw messages may embed ids — gate those separately. */
 function stripeDiagnostics(
   err: {
-    type?: string;
+    /** Prefer Stripe API type (`invalid_request_error`) over SDK class name */
+    diagnosticType?: string;
     code?: string;
     decline_code?: string;
     message?: string;
@@ -74,21 +127,26 @@ function stripeDiagnostics(
   },
   opts: {
     verbose: boolean;
-    /** When false (production API errors), omit Stripe `message` so we don't leak internal ids in strings. */
+    /** Card-style failures: show full Stripe message (already customer-facing). */
     exposeStripeMessage: boolean;
   }
 ): Record<string, string> | undefined {
   const out: Record<string, string> = {};
-  if (err.type) out.type = err.type;
+  if (err.diagnosticType) out.type = err.diagnosticType;
   if (err.code) out.code = err.code;
   if (err.decline_code) out.decline_code = err.decline_code;
   if (err.param) out.param = err.param;
   if (err.detail) out.detail = err.detail;
   if (err.doc_url) out.doc_url = err.doc_url;
   if (err.statusCode != null) out.httpStatus = String(err.statusCode);
+  if (err.requestId) out.requestId = err.requestId;
+
   const msg = err.message?.trim();
-  if (msg && (opts.verbose || opts.exposeStripeMessage)) out.message = msg;
-  if (opts.verbose && err.requestId) out.requestId = err.requestId;
+  if (msg) {
+    if (opts.verbose || opts.exposeStripeMessage) out.message = msg;
+    else out.message = redactStripeIds(msg);
+  }
+
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -277,16 +335,22 @@ export async function POST(
   } catch (err: unknown) {
     const stripeError = normalizeStripeThrown(err);
 
-    if (stripeError.type === 'StripeCardError') {
+    if (stripeError.sdkClassName === 'StripeCardError') {
       await prisma.tabParticipant.update({
         where: { id: participantId },
         data: { holdStatus: 'FAILED' },
       });
       const verbose = paymentDebugEnabled();
-      const details = stripeDiagnostics(stripeError, {
-        verbose,
-        exposeStripeMessage: true,
-      });
+      const details = stripeDiagnostics(
+        {
+          ...stripeError,
+          diagnosticType: stripeError.apiErrorType ?? stripeError.sdkClassName,
+        },
+        {
+          verbose,
+          exposeStripeMessage: true,
+        },
+      );
       return NextResponse.json(
         {
           status: 'failed',
@@ -298,7 +362,8 @@ export async function POST(
     }
 
     console.error('[hold] Stripe error', {
-      type: stripeError.type,
+      sdkClassName: stripeError.sdkClassName,
+      apiErrorType: stripeError.apiErrorType,
       code: stripeError.code,
       param: stripeError.param,
       decline_code: stripeError.decline_code,
@@ -307,10 +372,16 @@ export async function POST(
     });
 
     const verbose = paymentDebugEnabled();
-    const details = stripeDiagnostics(stripeError, {
-      verbose,
-      exposeStripeMessage: false,
-    });
+    const details = stripeDiagnostics(
+      {
+        ...stripeError,
+        diagnosticType: stripeError.apiErrorType ?? stripeError.sdkClassName,
+      },
+      {
+        verbose,
+        exposeStripeMessage: false,
+      },
+    );
     return NextResponse.json(
       {
         error: 'Payment processing failed',
@@ -359,12 +430,12 @@ export async function POST(
     lpe &&
     stripeDiagnostics(
       {
+        diagnosticType: typeof lpe.type === 'string' ? lpe.type : undefined,
         code: lpe.code ?? undefined,
         decline_code: lpe.decline_code ?? undefined,
         message: lpe.message ?? undefined,
-        type: lpe.type ?? undefined,
       },
-      { verbose, exposeStripeMessage: true }
+      { verbose, exposeStripeMessage: true },
     );
   return NextResponse.json(
     {
