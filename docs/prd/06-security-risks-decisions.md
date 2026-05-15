@@ -224,7 +224,7 @@ Implementation: Upstash Redis rate limit middleware on the relevant route groups
 | OPEN1 | Target market | US first. Warminster, PA launch. USD. PA sales tax 6%. |
 | OPEN2 | Stripe Connect from day one? | Yes, from Phase 3. Money never sits in WalkOut's account. |
 | OPEN3 | Monetization model | 0.5% of pre-tax food subtotal, charged to consumer as "WalkOut Service Fee" (v5.0 simplification from 1.5% + $0.99). |
-| OPEN4 | Flat or dynamic hold? | Flat hold. $75 default, restaurant-configurable $50–$150. |
+| OPEN4 | Flat or dynamic hold? | Flat hold. $1 default, restaurant-configurable $1–$150. |
 | OPEN5 | Write-off risk | Restaurant bears it. Disclosed in Terms of Service. 96h default window. |
 | OPEN6 | NFC sticker programming | Pre-programmed by WalkOut, shipped with onboarding kit. UWB = native app future. |
 | OPEN7 | Two Vercel cron jobs? | One combined cron `/api/cron/maintenance`, three internal functions. |

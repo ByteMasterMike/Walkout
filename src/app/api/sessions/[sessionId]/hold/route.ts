@@ -4,6 +4,10 @@ import { prisma } from '@/lib/prisma';
 import { stripe, STRIPE_PAYMENT_INTENT_CARD_ONLY } from '@/lib/stripe';
 import { auth } from '@/lib/auth';
 import { validateUuid } from '@/lib/validate';
+import {
+  MAX_RESTAURANT_HOLD_CENTS,
+  MIN_RESTAURANT_HOLD_CENTS,
+} from '@/lib/payment/holdConfig';
 
 const HoldSchema = z.object({
   participantId: z.string().uuid(),
@@ -279,11 +283,9 @@ export async function POST(
     );
   }
 
-  const MIN_HOLD_CENTS = 500;
-  const MAX_HOLD_CENTS = 15_000;
   if (
-    restaurant.defaultHoldAmount < MIN_HOLD_CENTS ||
-    restaurant.defaultHoldAmount > MAX_HOLD_CENTS
+    restaurant.defaultHoldAmount < MIN_RESTAURANT_HOLD_CENTS ||
+    restaurant.defaultHoldAmount > MAX_RESTAURANT_HOLD_CENTS
   ) {
     console.error('[hold] defaultHoldAmount out of bounds', restaurant.defaultHoldAmount);
     return NextResponse.json({ error: 'Payment configuration error' }, { status: 422 });

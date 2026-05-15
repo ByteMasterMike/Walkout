@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion, useInView } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { PhoneFrame } from '@/components/pitch';
+import { formatDefaultHoldUsd } from '@/lib/payment/holdConfig';
 
 /* ═══════════════════════════════════════════════════════════════
    HELPERS
@@ -229,7 +230,7 @@ function DinerSection() {
                     <br />
                     <em>Michael.</em>
                   </h2>
-                  <p className="d-sub">Hold of $75 placed · Visa ····4242</p>
+                  <p className="d-sub">Hold of {formatDefaultHoldUsd()} placed · Visa ····4242</p>
                 </motion.div>
               )}
               {active === 1 && (

@@ -33,7 +33,7 @@ Walk through each persona for every changed file. If a change touches something 
 - **Idempotency keys** include an attempt counter, persisted on `TabParticipant` BEFORE the Stripe call. An attacker retrying a request must not produce a second charge. See `MICHAEL.md` for key formats.
 - **`on_behalf_of: restaurant.stripeConnectAccountId`** set on every PaymentIntent. Omitting it can route money to the platform account instead of the restaurant.
 - **`application_fee_amount` is derived from service fee only**, never from total. An attacker who can influence the total (e.g. via a manipulated tip) must not be able to increase the fee to the platform.
-- **Hold amount range validated.** `restaurant.defaultHoldAmount` must be $50–$150 per PRD. An admin UI that sets $5000 would let the restaurant freeze large sums on diner cards.
+- **Hold amount range validated.** `restaurant.defaultHoldAmount` must be $1–$150 per PRD (`MIN_RESTAURANT_HOLD_CENTS` / `MAX_RESTAURANT_HOLD_CENTS` on `/hold`). An admin UI that sets extreme values could strand diner funds or break Stripe limits.
 - **3DS challenge forced on SetupIntent** (`request_three_d_secure: 'any'`). Skipping 3DS on setup breaks off-session charge exemptions and creates card-not-present liability.
 - **Guest migration (§11.8)** must verify `participant.anonToken === cookieAnonToken` inside the transaction. Missing check = account takeover vector (attacker supplies any participantId).
 - **Overflow PaymentIntent** requires `off_session: true` AND `confirm: true`. Missing either breaks the charge or causes a redirect loop.

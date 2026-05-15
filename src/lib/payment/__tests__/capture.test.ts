@@ -257,12 +257,12 @@ describe('computeOverflowFees — §11.5 overflow capture', () => {
   it('10. standard path: totalCents ≤ holdAmount → isOverflow=false, holdFeeCents=appFee, overflow=0', () => {
     const result = computeOverflowFees({
       applicationFeeCents: 25,
-      holdAmount: 7500,    // $75.00 hold
-      totalCents: 6325,    // $63.25 bill — under the hold
+      holdAmount: 100, // $1.00 hold
+      totalCents: 80, // under the hold
     })
 
     expect(result.isOverflow).toBe(false)
-    expect(result.holdFeeCents).toBe(25)     // full appFee on the single PI
+    expect(result.holdFeeCents).toBe(25) // full appFee on the single PI
     expect(result.overflowFeeCents).toBe(0)
     expect(result.overflowAmountCents).toBe(0)
   })
@@ -273,16 +273,16 @@ describe('computeOverflowFees — §11.5 overflow capture', () => {
    */
   it('11. overflow path: totalCents > holdAmount → isOverflow=true, overflowAmountCents = total − hold', () => {
     const result = computeOverflowFees({
-      applicationFeeCents: 50,
-      holdAmount: 7500,    // $75 hold
-      totalCents: 10000,   // $100 bill — overflow of $25
+      applicationFeeCents: 100,
+      holdAmount: 100, // $1 hold — typical tabs exceed this
+      totalCents: 10000, // $100 bill
     })
 
     expect(result.isOverflow).toBe(true)
-    expect(result.overflowAmountCents).toBe(2500) // 10000 − 7500
+    expect(result.overflowAmountCents).toBe(9900) // 10000 − 100
     // Both halves must exist
     expect(result.holdFeeCents).toBeGreaterThan(0)
-    expect(result.holdFeeCents + result.overflowFeeCents).toBe(50)
+    expect(result.holdFeeCents + result.overflowFeeCents).toBe(100)
   })
 
   /**
@@ -295,19 +295,16 @@ describe('computeOverflowFees — §11.5 overflow capture', () => {
    * This test picks numbers where round and floor disagree.
    */
   it('12. floor-then-remainder: holdFeeCents + overflowFeeCents === applicationFeeCents exactly', () => {
-    // Math.floor(214 × 7500 / 12000) = Math.floor(133.75) = 133
-    // overflowFeeCents = 214 − 133 = 81
-    // If Math.round were used: round(133.75) = 134, then 214 − 134 = 80, sum = 214 ✓
-    // but round(134) + round(80) ≠ necessarily 214 in all cases.
-    // This specific case also tests the exact values.
+    // Math.floor(214 × 100 / 12000) = Math.floor(1.783…) = 1
+    // overflowFeeCents = 214 − 1 = 213
     const result = computeOverflowFees({
       applicationFeeCents: 214,
-      holdAmount: 7500,
+      holdAmount: 100,
       totalCents: 12000,
     })
 
-    expect(result.holdFeeCents).toBe(133)    // Math.floor(214 × 7500 / 12000)
-    expect(result.overflowFeeCents).toBe(81) // 214 − 133 (exact remainder)
+    expect(result.holdFeeCents).toBe(1) // Math.floor(214 × 100 / 12000)
+    expect(result.overflowFeeCents).toBe(213) // 214 − 1 (exact remainder)
     expect(result.holdFeeCents + result.overflowFeeCents).toBe(214)
   })
 })

@@ -181,7 +181,8 @@ model Restaurant {
   taxLabel                  String              @default("Sales Tax")
   taxEnabled                Boolean             @default(true)
 
-  defaultHoldAmount         Int                 @default(7500)
+  /// Card authorization hold (USD cents). Platform default $1.00 — sync with `DEFAULT_HOLD_AMOUNT_CENTS`.
+  defaultHoldAmount         Int                 @default(100)
   idleTimeoutMinutes        Int                 @default(15)
 
   walkOutServiceFeePercent  Decimal             @db.Decimal(5, 4) @default(0.0050)

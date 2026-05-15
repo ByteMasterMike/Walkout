@@ -4,6 +4,8 @@ import { FormEvent, useCallback, useState } from 'react';
 import { useStripe, useElements, PaymentElement } from '@stripe/react-stripe-js';
 import type { StripePaymentElementOptions } from '@stripe/stripe-js';
 
+import { formatDefaultHoldUsd } from '@/lib/payment/holdConfig';
+
 // `link: 'never'` is supported at runtime on Stripe.js for the Payment Element
 // but its TS type was only added in stripe/stripe-js#759 (post-v4.10). Cast so
 // we don't need to bump the SDK in this fix.
@@ -176,8 +178,8 @@ export default function JoinPaymentStep({ sessionId, participantId, setupClientS
         {busy ? 'Saving card…' : 'Save card & place hold'}
       </button>
       <p className="text-xs text-gray-400">
-        A temporary authorization up to $75 may appear on your card. You are only charged for what you order plus tax
-        and the service fee.
+        A temporary authorization up to {formatDefaultHoldUsd()} may appear on your card. You are only charged for what
+        you order plus tax and the service fee.
       </p>
     </form>
   );

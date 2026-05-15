@@ -107,7 +107,7 @@ it('fee allocations sum EXACTLY to total fee — no rounding drift', () => {
 ```ts
 it('floor-then-remainder: halves sum EXACTLY to application fee', () => {
   const totalCents = 12000
-  const holdAmount = 7500
+  const holdAmount = 100 // $1 default authorization hold (DEFAULT_HOLD_AMOUNT_CENTS)
   const applicationFeeCents = 25
 
   const holdFeeCents = Math.floor(applicationFeeCents * holdAmount / totalCents)

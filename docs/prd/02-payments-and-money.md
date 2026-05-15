@@ -18,7 +18,7 @@ Diner taps NFC → SetupIntent → off-session PaymentMethod saved
                                            ▼
                                 Create PaymentIntent (hold)
                                   capture_method: 'manual'
-                                  amount: defaultHoldAmount (7500)
+                                  amount: defaultHoldAmount (100)
                                   application_fee_amount: 0   ← NO fee on hold
                                   on_behalf_of: restaurant.stripeConnectAccountId
                                   idempotency: hold-{pid}-{holdAttempt}
@@ -91,7 +91,7 @@ participant.holdAttempt += 1
 await prisma.tabParticipant.update({ where: { id: participant.id }, data: { holdAttempt: participant.holdAttempt }})
 
 const paymentIntent = await stripe.paymentIntents.create({
-  amount:                 restaurant.defaultHoldAmount,   // 7500 = $75.00
+  amount:                 restaurant.defaultHoldAmount,   // 100 = $1.00
   currency:               'usd',
   customer:               stripeCustomerId,
   payment_method:         paymentMethodId,

@@ -207,7 +207,7 @@ model Restaurant {
   taxEnabled                Boolean   @default(true)
 
   // Payment
-  defaultHoldAmount         Int       @default(7500)        // $75
+  defaultHoldAmount         Int       @default(100)         // $1
   idleTimeoutMinutes        Int       @default(15)
 
   // WalkOut platform fee (v5.0: 0.5% flat, flat-cents retained at 0)

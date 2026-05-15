@@ -110,7 +110,7 @@ The cash drawer opens automatically because it plugs into the printer via RJ-12 
 9. If all participants settled: session CLOSED, table AVAILABLE
 ```
 
-**Hold cancellation**: when switching to cash, the original auth hold MUST be cancelled via `stripe.paymentIntents.cancel(participant.stripePaymentIntentId)`. Leaving the hold in place blocks $75 on the diner's card unnecessarily for ~7 days.
+**Hold cancellation**: when switching to cash, the original auth hold MUST be cancelled via `stripe.paymentIntents.cancel(participant.stripePaymentIntentId)`. Leaving the hold in place blocks funds on the diner's card unnecessarily for ~7 days.
 
 ### 16.3 Receipt XML Generation
 

@@ -89,7 +89,7 @@ These come straight from PRD §7.2, §11, §17, and §18. Violating any of them 
 ### LOW — Style
 
 - TODO/FIXME without an issue reference.
-- Magic numbers (e.g. `7500` instead of `restaurant.defaultHoldAmount`).
+- Magic numbers for holds — prefer `DEFAULT_HOLD_AMOUNT_CENTS` / `formatDefaultHoldUsd()` from `@/lib/payment/holdConfig` or `restaurant.defaultHoldAmount`.
 - Inconsistent naming — match surrounding codebase conventions.
 - Emojis in source (`MICHAEL.md` forbids).
 

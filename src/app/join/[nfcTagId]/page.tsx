@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import JoinPaymentStep from './JoinPaymentStep';
+import { formatDefaultHoldUsd } from '@/lib/payment/holdConfig';
 
 const pk = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 
@@ -109,7 +110,8 @@ export default function JoinPage() {
           {step === 'form' ? (
             <p className="mt-1 text-sm text-gray-500">
               Enter your name to open a tab. A{' '}
-              <span className="font-medium">$75 hold</span> will appear on your card — you only pay for what you order.
+              <span className="font-medium">{formatDefaultHoldUsd()} hold</span> will appear on your card — you only pay
+              for what you order.
             </p>
           ) : (
             <p className="mt-1 text-sm text-gray-500">
@@ -201,8 +203,9 @@ export default function JoinPage() {
         {/* Consent & disclaimers */}
         <div className="mt-6 space-y-3 text-xs text-gray-400">
           <p>
-            By continuing you agree that a temporary authorization hold of up to $75 will be placed on your payment
-            method. You will only be charged for the items you order plus applicable tax and a 0.5% service fee.
+            By continuing you agree that a temporary authorization hold of up to {formatDefaultHoldUsd()} will be placed
+            on your payment method. You will only be charged for the items you order plus applicable tax and a 0.5%
+            service fee.
           </p>
           <label className="flex items-start gap-2 cursor-pointer">
             <input

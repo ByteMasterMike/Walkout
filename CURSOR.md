@@ -8,7 +8,7 @@ This file assumes you use Cursor as the cofounder. You and Michael share **`.cur
 
 ## Project (one-paragraph version)
 
-WalkOut is a restaurant payment + operating system. A diner taps an NFC sticker on the table, the app opens a tab and puts a temporary $75 hold on their card, they order food through the app, eat, leave — the actual charge happens automatically when they go. Restaurants get a free POS (no monthly fee, no terminal hardware, no contract). WalkOut earns 0.5% from the diner. We're forking PokerPay (a poker-table app with similar mechanics) and rebuilding it for restaurants. Launch market: Warminster, PA.
+WalkOut is a restaurant payment + operating system. A diner taps an NFC sticker on the table, the app opens a tab and puts a temporary $1 hold on their card, they order food through the app, eat, leave — the actual charge happens automatically when they go. Restaurants get a free POS (no monthly fee, no terminal hardware, no contract). WalkOut earns 0.5% from the diner. We're forking PokerPay (a poker-table app with similar mechanics) and rebuilding it for restaurants. Launch market: Warminster, PA.
 
 ## Stack — what these words mean if you're new
 

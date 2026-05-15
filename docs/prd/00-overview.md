@@ -191,7 +191,7 @@ EVERY SUBSEQUENT VISIT (NFC, v1):
   → Tap NFC sticker
   → Browser opens: walkoutofficial.com/join/[nfcTagId]
   → App recognises account from session cookie
-  → Tab opens, auth hold placed silently ($75 default)
+  → Tab opens, auth hold placed silently ($1 default)
   → Browse menu, add items, eat
   → Ready to leave → three options:
 
@@ -222,7 +222,7 @@ Payment interactions after meal:    1 optional tap (to pick a non-default tip)
 Tap NFC → browser opens join page
   → Enter display name
   → Stripe payment sheet: Apple Pay / Google Pay / Card
-  → Consent: "A $75 hold appears on your statement.
+  → Consent: "A $1 hold appears on your statement.
     You'll only be charged for what you order."
   → SMS disclaimer displayed if phone field completed:
     "Message frequency varies. Reply STOP to opt out."
