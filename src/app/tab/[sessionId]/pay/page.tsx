@@ -43,6 +43,15 @@ function sessionNeedsTipChoice(status: string, prompt: TipPromptPayload | null):
   return Boolean(prompt && ['AWAITING_TIP', 'CAPTURING', 'OPEN'].includes(status));
 }
 
+/** Parses user-entered dollars into integer cents, or null if invalid / empty. */
+function parseTipDollarsToCents(raw: string): number | null {
+  const trimmed = raw.replace(/[$,\s]/g, '').trim();
+  if (trimmed === '') return null;
+  const n = Number.parseFloat(trimmed);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
+}
+
 export default function TabPayPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const router = useRouter();
@@ -58,6 +67,8 @@ export default function TabPayPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [cashLoading, setCashLoading] = useState(false);
   const [tipSubmitLoading, setTipSubmitLoading] = useState(false);
+  const [customTipOpen, setCustomTipOpen] = useState(false);
+  const [customTipDraft, setCustomTipDraft] = useState('');
   const [done, setDone] = useState(false);
   const [cashSuccess, setCashSuccess] = useState(false);
 
@@ -222,6 +233,20 @@ export default function TabPayPage() {
     return Math.min(Math.round((tipPrompt.subtotalCents * pct) / 100), tipPrompt.maxTipCents);
   }
 
+  function submitCustomTip() {
+    if (!tipPrompt) return;
+    const cents = parseTipDollarsToCents(customTipDraft);
+    if (cents === null) {
+      setError('Enter a valid tip amount.');
+      return;
+    }
+    if (cents > tipPrompt.maxTipCents) {
+      setError(`Tip can't exceed $${(tipPrompt.maxTipCents / 100).toFixed(2)} on this tab.`);
+      return;
+    }
+    void submitTip(cents, 'DINER_CHOICE');
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -315,13 +340,72 @@ export default function TabPayPage() {
                 key={pct}
                 type="button"
                 disabled={tipSubmitLoading}
-                onClick={() => void submitTip(tipFromPercent(pct), 'DINER_CHOICE')}
+                onClick={() => {
+                  setCustomTipOpen(false);
+                  void submitTip(tipFromPercent(pct), 'DINER_CHOICE');
+                }}
                 className="py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 disabled:opacity-50"
               >
                 {pct}%
               </button>
             ))}
           </div>
+
+          {!customTipOpen ? (
+            <button
+              type="button"
+              disabled={tipSubmitLoading}
+              onClick={() => {
+                setError(null);
+                setCustomTipOpen(true);
+              }}
+              className="w-full py-3 rounded-xl border border-gray-300 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Custom amount
+            </button>
+          ) : (
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-4 space-y-3">
+              <label htmlFor="custom-tip-input" className="block text-xs font-medium text-gray-700">
+                Custom tip (USD)
+              </label>
+              <input
+                id="custom-tip-input"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0.00"
+                disabled={tipSubmitLoading}
+                value={customTipDraft}
+                onChange={(e) => setCustomTipDraft(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 disabled:opacity-50"
+              />
+              <p className="text-xs text-gray-500">
+                Maximum <span className="font-medium text-gray-700">${maxTip.toFixed(2)}</span> (50% of food subtotal).
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={tipSubmitLoading}
+                  onClick={() => void submitCustomTip()}
+                  className="flex-1 py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 disabled:opacity-50"
+                >
+                  Add tip
+                </button>
+                <button
+                  type="button"
+                  disabled={tipSubmitLoading}
+                  onClick={() => {
+                    setCustomTipDraft('');
+                    setCustomTipOpen(false);
+                    setError(null);
+                  }}
+                  className="px-4 py-3 rounded-xl border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           <button
             type="button"

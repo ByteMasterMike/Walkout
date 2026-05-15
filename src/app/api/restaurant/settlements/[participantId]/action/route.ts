@@ -6,6 +6,13 @@ import { prisma } from '@/lib/prisma'
 import { stripe, STRIPE_PAYMENT_INTENT_CARD_ONLY } from '@/lib/stripe'
 import { validateUuid } from '@/lib/validate'
 import { SettlementActionBodySchema } from '@/lib/schemas/settlements'
+import {
+  DEFAULT_HOLD_AMOUNT_CENTS,
+  LEGACY_DEFAULT_HOLD_CENTS,
+  MAX_RESTAURANT_HOLD_CENTS,
+  MIN_RESTAURANT_HOLD_CENTS,
+  effectiveHoldAmountCents,
+} from '@/lib/payment/holdConfig'
 import { captureParticipantTab, resolveDefaultTip, type OrderItemStatus } from '@/lib/payment/capture'
 
 function assertManagerPlus(role: string): boolean {
@@ -25,6 +32,7 @@ async function ensureParticipantForRestaurant(participantId: string, restaurantI
             select: {
               stripeConnectAccountId: true,
               stripeConnectOnboarded: true,
+              id: true,
               defaultHoldAmount: true,
               walkOutServiceFeePercent: true,
               walkOutServiceFeeFlat: true,
@@ -46,6 +54,16 @@ async function retryAuthHold(p: Awaited<ReturnType<typeof ensureParticipantForRe
     return NextResponse.json({ error: 'No saved payment method' }, { status: 422 })
   }
 
+  if (
+    restaurant.defaultHoldAmount < MIN_RESTAURANT_HOLD_CENTS ||
+    restaurant.defaultHoldAmount > MAX_RESTAURANT_HOLD_CENTS
+  ) {
+    console.error('[settlements/action RETRY_HOLD] defaultHoldAmount out of bounds', restaurant.defaultHoldAmount)
+    return NextResponse.json({ error: 'Payment configuration error' }, { status: 422 })
+  }
+
+  const holdCents = effectiveHoldAmountCents(restaurant.defaultHoldAmount)
+
   const newHoldAttempt = p.holdAttempt + 1
   await prisma.tabParticipant.update({
     where: { id: p.id },
@@ -59,7 +77,7 @@ async function retryAuthHold(p: Awaited<ReturnType<typeof ensureParticipantForRe
     const paymentIntent = await stripe.paymentIntents.create(
       {
         ...STRIPE_PAYMENT_INTENT_CARD_ONLY,
-        amount: restaurant.defaultHoldAmount,
+        amount: holdCents,
         currency: 'usd',
         customer: p.stripeCustomerId,
         payment_method: p.stripePaymentMethodId,
@@ -80,10 +98,20 @@ async function retryAuthHold(p: Awaited<ReturnType<typeof ensureParticipantForRe
         where: { id: p.id },
         data: {
           stripePaymentIntentId: paymentIntent.id,
-          holdAmount: restaurant.defaultHoldAmount,
+          holdAmount: holdCents,
           holdStatus: 'HELD',
         },
       })
+      if (restaurant.defaultHoldAmount === LEGACY_DEFAULT_HOLD_CENTS) {
+        void prisma.restaurant
+          .updateMany({
+            where: { id: restaurant.id, defaultHoldAmount: LEGACY_DEFAULT_HOLD_CENTS },
+            data: { defaultHoldAmount: DEFAULT_HOLD_AMOUNT_CENTS },
+          })
+          .catch((err: unknown) =>
+            console.error('[settlements/action RETRY_HOLD] legacy defaultHoldAmount backfill failed', err),
+          )
+      }
       return NextResponse.json({ ok: true, status: 'held' })
     }
     if (paymentIntent.status === 'requires_action') {

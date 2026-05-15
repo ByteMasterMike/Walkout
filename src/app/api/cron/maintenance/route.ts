@@ -6,6 +6,7 @@ import { captureParticipantTab, getTimeoutTipResolution } from '@/lib/payment/ca
 import { getStripe, STRIPE_PAYMENT_INTENT_CARD_ONLY } from '@/lib/stripe'
 import { assignTipPromptTokensForSession } from '@/lib/tip/assignTipPromptTokens'
 import { notifyTipWindowOpened } from '@/lib/notify/tipWindow'
+import { effectiveHoldAmountCents } from '@/lib/payment/holdConfig'
 
 // ================================================================
 // /api/cron/maintenance — single Vercel Cron job, every 5 minutes
@@ -190,10 +191,11 @@ async function cleanupSessions(): Promise<void> {
     })
 
     try {
+      const reauthCents = effectiveHoldAmountCents(p.holdAmount)
       const newPi = await stripe.paymentIntents.create(
         {
           ...STRIPE_PAYMENT_INTENT_CARD_ONLY,
-          amount: p.holdAmount,
+          amount: reauthCents,
           currency: 'usd',
           customer: p.stripeCustomerId!,
           payment_method: p.stripePaymentMethodId!,
@@ -218,7 +220,7 @@ async function cleanupSessions(): Promise<void> {
         where: { id: p.id },
         data: {
           stripePaymentIntentId: newPi.id,
-          holdAmount: p.holdAmount,
+          holdAmount: reauthCents,
           holdStatus: 'HELD',
           reauthCount: { increment: 1 },
         },

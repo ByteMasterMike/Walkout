@@ -5,8 +5,11 @@ import { stripe, STRIPE_PAYMENT_INTENT_CARD_ONLY } from '@/lib/stripe';
 import { auth } from '@/lib/auth';
 import { validateUuid } from '@/lib/validate';
 import {
+  DEFAULT_HOLD_AMOUNT_CENTS,
+  LEGACY_DEFAULT_HOLD_CENTS,
   MAX_RESTAURANT_HOLD_CENTS,
   MIN_RESTAURANT_HOLD_CENTS,
+  effectiveHoldAmountCents,
 } from '@/lib/payment/holdConfig';
 
 const HoldSchema = z.object({
@@ -217,6 +220,7 @@ export async function POST(
           restaurantId: true,
           restaurant: {
             select: {
+              id: true,
               stripeConnectAccountId: true,
               stripeConnectOnboarded: true,
               defaultHoldAmount: true,
@@ -291,6 +295,8 @@ export async function POST(
     return NextResponse.json({ error: 'Payment configuration error' }, { status: 422 });
   }
 
+  const holdCents = effectiveHoldAmountCents(restaurant.defaultHoldAmount);
+
   // ── PRD §11.3: Pre-increment holdAttempt BEFORE Stripe call ──────────────
   // The idempotency key includes the counter so retries get a fresh key,
   // preventing duplicate holds if the first call succeeds but the response
@@ -313,7 +319,7 @@ export async function POST(
     paymentIntent = await stripe.paymentIntents.create(
       {
         ...STRIPE_PAYMENT_INTENT_CARD_ONLY,
-        amount: restaurant.defaultHoldAmount,
+        amount: holdCents,
         currency: 'usd',
         customer: participant.stripeCustomerId,
         payment_method: stripePaymentMethodId,
@@ -404,10 +410,20 @@ export async function POST(
       where: { id: participantId },
       data: {
         stripePaymentIntentId: paymentIntent.id,
-        holdAmount: restaurant.defaultHoldAmount,
+        holdAmount: holdCents,
         holdStatus: 'HELD',
       },
     });
+    if (restaurant.defaultHoldAmount === LEGACY_DEFAULT_HOLD_CENTS) {
+      void prisma.restaurant
+        .updateMany({
+          where: { id: restaurant.id, defaultHoldAmount: LEGACY_DEFAULT_HOLD_CENTS },
+          data: { defaultHoldAmount: DEFAULT_HOLD_AMOUNT_CENTS },
+        })
+        .catch((err: unknown) =>
+          console.error('[hold] legacy defaultHoldAmount backfill failed', err),
+        );
+    }
     return NextResponse.json({ status: 'held' });
   }
 
