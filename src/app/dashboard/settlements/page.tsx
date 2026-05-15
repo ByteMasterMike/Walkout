@@ -78,21 +78,31 @@ export default function SettlementsPage() {
     }
   }
 
+  async function loadAgg() {
+    try {
+      const r = await fetch('/api/restaurant/dashboard/aggregates', { credentials: 'include' });
+      if (!r.ok) return;
+      const d = (await r.json()) as Record<string, unknown>;
+      if (d && typeof d.revenueTonightCents === 'number') {
+        setAgg({
+          revenueTonightCents: d.revenueTonightCents,
+          stripeFeesTonightCents:
+            typeof d.stripeFeesTonightCents === 'number' ? d.stripeFeesTonightCents : 0,
+          openHolds: typeof d.openHolds === 'number' ? d.openHolds : 0,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   useEffect(() => {
     void loadSettlements();
-    void fetch('/api/restaurant/dashboard/aggregates', { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d && typeof d.revenueTonightCents === 'number') {
-          setAgg({
-            revenueTonightCents: d.revenueTonightCents,
-            stripeFeesTonightCents:
-              typeof d.stripeFeesTonightCents === 'number' ? d.stripeFeesTonightCents : 0,
-            openHolds: typeof d.openHolds === 'number' ? d.openHolds : 0,
-          });
-        }
-      })
-      .catch(() => {});
+    void loadAgg();
+    const id = setInterval(() => {
+      void loadAgg();
+    }, 15_000);
+    return () => clearInterval(id);
   }, []);
 
   async function handleAction(rowId: string, action: SettlementAction) {

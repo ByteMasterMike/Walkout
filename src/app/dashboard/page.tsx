@@ -17,6 +17,7 @@ import {
   TileChefIcon,
   TileBellIcon,
 } from '@/components/icons/prototype';
+import { DashboardAutoRefresh } from '@/components/dashboard-auto-refresh';
 
 export const dynamic = 'force-dynamic';
 
@@ -146,6 +147,7 @@ export default async function DashboardPage() {
 
   return (
     <PageShell>
+      <DashboardAutoRefresh />
       <PageHead
         title={
           <>

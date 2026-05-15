@@ -57,7 +57,11 @@ export default function TipsAnalyticsPage() {
   }, [rollingDays]);
 
   useEffect(() => {
-    load();
+    void load();
+    const id = setInterval(() => {
+      void load();
+    }, 15_000);
+    return () => clearInterval(id);
   }, [load]);
 
   async function openPool() {
