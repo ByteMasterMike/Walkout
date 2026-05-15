@@ -77,9 +77,7 @@ export default function JoinPaymentStep({ sessionId, participantId, setupClientS
       }
 
       if (!res.ok || parsed.status === 'failed') {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[join-payment] /hold failed', { httpStatus: res.status, body: parsed });
-        }
+        console.warn('[join-payment] /hold failed', { httpStatus: res.status, body: parsed });
         const base =
           typeof parsed.error === 'string'
             ? parsed.error

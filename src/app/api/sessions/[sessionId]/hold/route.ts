@@ -21,21 +21,30 @@ function paymentDebugEnabled(): boolean {
   );
 }
 
-function stripeErrorDetails(err: {
-  type?: string;
-  code?: string;
-  decline_code?: string;
-  message?: string;
-  requestId?: string;
-  param?: string;
-}): Record<string, string> | undefined {
+/** Stripe codes/types are safe to surface to the browser; raw messages may embed ids — gate those separately. */
+function stripeDiagnostics(
+  err: {
+    type?: string;
+    code?: string;
+    decline_code?: string;
+    message?: string;
+    requestId?: string;
+    param?: string;
+  },
+  opts: {
+    verbose: boolean;
+    /** When false (production API errors), omit Stripe `message` so we don't leak internal ids in strings. */
+    exposeStripeMessage: boolean;
+  }
+): Record<string, string> | undefined {
   const out: Record<string, string> = {};
   if (err.type) out.type = err.type;
   if (err.code) out.code = err.code;
   if (err.decline_code) out.decline_code = err.decline_code;
-  if (err.message) out.message = err.message;
-  if (err.requestId) out.requestId = err.requestId;
   if (err.param) out.param = err.param;
+  const msg = err.message?.trim();
+  if (msg && (opts.verbose || opts.exposeStripeMessage)) out.message = msg;
+  if (opts.verbose && err.requestId) out.requestId = err.requestId;
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -50,7 +59,7 @@ function stripeErrorDetails(err: {
  * Response shapes:
  *   { status: 'held' }                            — hold placed, diner can order
  *   { status: 'requires_action', clientSecret }   — 3DS modal required
- *   { status: 'failed', error: 'Card declined' }  — holdStatus = FAILED, menu blocked
+ *   { status: 'failed', error: 'Card declined', details?: { type, code, … } } — optional Stripe diagnostics
  */
 export async function POST(
   request: Request,
@@ -236,13 +245,16 @@ export async function POST(
         where: { id: participantId },
         data: { holdStatus: 'FAILED' },
       });
-      const debug = paymentDebugEnabled();
-      const details = stripeErrorDetails(stripeError);
+      const verbose = paymentDebugEnabled();
+      const details = stripeDiagnostics(stripeError, {
+        verbose,
+        exposeStripeMessage: true,
+      });
       return NextResponse.json(
         {
           status: 'failed',
           error: 'Card declined',
-          ...(debug && details ? { details } : {}),
+          ...(details ? { details } : {}),
         },
         { status: 402 }
       );
@@ -257,12 +269,15 @@ export async function POST(
       message: stripeError.message,
     });
 
-    const debug = paymentDebugEnabled();
-    const details = stripeErrorDetails(stripeError);
+    const verbose = paymentDebugEnabled();
+    const details = stripeDiagnostics(stripeError, {
+      verbose,
+      exposeStripeMessage: false,
+    });
     return NextResponse.json(
       {
         error: 'Payment processing failed',
-        ...(debug && details ? { details } : {}),
+        ...(details ? { details } : {}),
       },
       { status: 500 }
     );
@@ -301,21 +316,24 @@ export async function POST(
     where: { id: participantId },
     data: { holdStatus: 'FAILED' },
   });
-  const debug = paymentDebugEnabled();
+  const verbose = paymentDebugEnabled();
   const lpe = paymentIntent.last_payment_error;
   const lpeDetails =
     lpe &&
-    stripeErrorDetails({
-      code: lpe.code ?? undefined,
-      decline_code: lpe.decline_code ?? undefined,
-      message: lpe.message ?? undefined,
-      type: lpe.type ?? undefined,
-    });
+    stripeDiagnostics(
+      {
+        code: lpe.code ?? undefined,
+        decline_code: lpe.decline_code ?? undefined,
+        message: lpe.message ?? undefined,
+        type: lpe.type ?? undefined,
+      },
+      { verbose, exposeStripeMessage: true }
+    );
   return NextResponse.json(
     {
       status: 'failed',
       error: 'Card declined',
-      ...(debug && lpeDetails ? { details: lpeDetails } : {}),
+      ...(lpeDetails ? { details: lpeDetails } : {}),
     },
     { status: 402 }
   );
