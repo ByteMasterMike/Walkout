@@ -394,7 +394,9 @@ export async function POST(
 
   // ── Handle PaymentIntent status ───────────────────────────────────────────
 
-  if (paymentIntent.status === 'succeeded') {
+  // Manual capture: a successful authorization is `requires_capture`, not `succeeded`.
+  // Treat both as HELD so we don't mis-classify a good auth-hold as "Card declined".
+  if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture') {
     // Hold placed — diner can now browse the menu and place orders
     await prisma.tabParticipant.update({
       where: { id: participantId },

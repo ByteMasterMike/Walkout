@@ -73,7 +73,8 @@ async function retryAuthHold(p: Awaited<ReturnType<typeof ensureParticipantForRe
       { idempotencyKey: `hold-${p.id}-${newHoldAttempt}` },
     )
 
-    if (paymentIntent.status === 'succeeded') {
+    // Manual capture authorizations are `requires_capture`, not `succeeded`.
+    if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture') {
       await prisma.tabParticipant.update({
         where: { id: p.id },
         data: {
