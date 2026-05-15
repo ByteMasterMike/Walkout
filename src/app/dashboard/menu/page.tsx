@@ -41,6 +41,7 @@ const EMPTY_ITEM = {
   allergens: [] as string[],
   isPopular: false,
   categoryId: null as string | null,
+  isAvailable: true,
 };
 
 export default function MenuPage() {
@@ -52,12 +53,17 @@ export default function MenuPage() {
   const [addingCat, setAddingCat] = useState(false);
   const [catError, setCatError] = useState('');
 
-  // Add item modal
-  const [showAddItem, setShowAddItem] = useState(false);
-  const [addItemCategoryId, setAddItemCategoryId] = useState<string | null>(null);
+  // Add / edit item modal
+  const [showItemModal, setShowItemModal] = useState(false);
+  const [itemModalMode, setItemModalMode] = useState<'add' | 'edit'>('add');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemForm, setItemForm] = useState({ ...EMPTY_ITEM });
   const [savingItem, setSavingItem] = useState(false);
   const [itemError, setItemError] = useState('');
+
+  const [deleteTarget, setDeleteTarget] = useState<MenuItemRow | null>(null);
+  const [deletingItem, setDeletingItem] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // Photo upload
   const fileRef = useRef<HTMLInputElement>(null);
@@ -181,12 +187,38 @@ export default function MenuPage() {
     setItemError('Photo upload is not wired yet — add items without a photo for now.');
   }
 
+  function closeItemModal() {
+    setShowItemModal(false);
+    setEditingItemId(null);
+    setItemError('');
+    setItemForm({ ...EMPTY_ITEM });
+    setPendingImageUrl(null);
+  }
+
   function openAddItem(categoryId: string) {
-    setAddItemCategoryId(categoryId);
+    setItemModalMode('add');
+    setEditingItemId(null);
     setItemForm({ ...EMPTY_ITEM, categoryId });
     setPendingImageUrl(null);
     setItemError('');
-    setShowAddItem(true);
+    setShowItemModal(true);
+  }
+
+  function openEditItem(item: MenuItemRow) {
+    setItemModalMode('edit');
+    setEditingItemId(item.id);
+    setItemForm({
+      name: item.name,
+      description: item.description ?? '',
+      price: item.price,
+      allergens: [...item.allergens],
+      isPopular: item.isPopular,
+      categoryId: item.categoryId,
+      isAvailable: item.isAvailable,
+    });
+    setPendingImageUrl(null);
+    setItemError('');
+    setShowItemModal(true);
   }
 
   async function handleSaveItem(e: React.FormEvent) {
@@ -199,40 +231,87 @@ export default function MenuPage() {
       return;
     }
 
-    if (!addItemCategoryId || addItemCategoryId === '__uncat__') {
-      setItemError('Pick a real category (not Uncategorized).');
-      return;
+    if (itemModalMode === 'add') {
+      if (!itemForm.categoryId || itemForm.categoryId === '__uncat__') {
+        setItemError('Pick a category.');
+        return;
+      }
     }
+
+    const payload = {
+      categoryId: itemForm.categoryId,
+      name: itemForm.name.trim(),
+      description: itemForm.description.trim() || undefined,
+      price: priceNum.toFixed(2),
+      allergens: itemForm.allergens,
+      isPopular: itemForm.isPopular,
+      isAvailable: itemForm.isAvailable,
+    };
 
     setSavingItem(true);
     try {
-      const res = await fetch('/api/restaurant/menu/items', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          categoryId: addItemCategoryId,
-          name: itemForm.name.trim(),
-          description: itemForm.description.trim() || undefined,
-          price: priceNum.toFixed(2),
-          allergens: itemForm.allergens,
-          isPopular: itemForm.isPopular,
-          isAvailable: true,
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setItemError(
-          typeof body.error === 'string' ? body.error : 'Could not save item. Check permissions (Manager/Admin).'
-        );
-        return;
+      if (itemModalMode === 'edit' && editingItemId) {
+        const res = await fetch(`/api/restaurant/menu/items/${editingItemId}`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setItemError(
+            typeof body.error === 'string' ? body.error : 'Could not update item. Check permissions (Manager/Admin).',
+          );
+          return;
+        }
+      } else {
+        const res = await fetch('/api/restaurant/menu/items', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setItemError(
+            typeof body.error === 'string' ? body.error : 'Could not save item. Check permissions (Manager/Admin).',
+          );
+          return;
+        }
       }
-      setShowAddItem(false);
-      setPendingImageUrl(null);
-      setItemForm({ ...EMPTY_ITEM });
+      closeItemModal();
       await loadMenu();
     } finally {
       setSavingItem(false);
+    }
+  }
+
+  async function confirmDeleteItem() {
+    if (!deleteTarget) return;
+    setDeletingItem(true);
+    setDeleteError('');
+    try {
+      const res = await fetch(`/api/restaurant/menu/items/${deleteTarget.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (res.status === 409) {
+        setDeleteError(
+          typeof body.error === 'string'
+            ? body.error
+            : 'This item has order history. Use 86 to hide it instead.',
+        );
+        return;
+      }
+      if (!res.ok) {
+        setDeleteError(typeof body.error === 'string' ? body.error : 'Could not remove item.');
+        return;
+      }
+      setDeleteTarget(null);
+      await loadMenu();
+    } finally {
+      setDeletingItem(false);
     }
   }
 
@@ -244,7 +323,7 @@ export default function MenuPage() {
             The <em>menu</em>
           </>
         }
-        subtitle={<>Categories, items, photos, prices. 86 anything in one tap.</>}
+        subtitle={<>Categories, items, prices — edit, remove, or 86 in one place.</>}
         actions={
           <button
             type="button"
@@ -340,6 +419,25 @@ export default function MenuPage() {
                     ) : null}
                   </div>
                   <div className="pr">{item.price}</div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditItem(item)}
+                      className="rounded-full border border-border px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeleteError('');
+                        setDeleteTarget(item);
+                      }}
+                      className="rounded-full border border-destructive/40 px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.18em] text-destructive/90 transition-colors hover:bg-destructive/10"
+                    >
+                      Remove
+                    </button>
+                  </div>
                   <button
                     type="button"
                     aria-label={item.isAvailable ? '86 item' : 'Restore item'}
@@ -356,17 +454,19 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* Add item modal */}
-      {showAddItem && (
+      {/* Add / edit item modal */}
+      {showItemModal && (
         <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center">
           <button
             type="button"
             className="absolute inset-0 bg-black/50"
             aria-label="Close"
-            onClick={() => setShowAddItem(false)}
+            onClick={closeItemModal}
           />
           <div className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-[14px] border border-border bg-card p-6 shadow-xl sm:max-w-lg sm:rounded-[14px]">
-            <h2 className="mb-4 font-display text-2xl font-light text-foreground">Add menu item</h2>
+            <h2 className="mb-4 font-display text-2xl font-light text-foreground">
+              {itemModalMode === 'edit' ? 'Edit menu item' : 'Add menu item'}
+            </h2>
 
             <form onSubmit={handleSaveItem} className="space-y-4">
               <div>
@@ -400,6 +500,31 @@ export default function MenuPage() {
                     if (file) handlePhotoUpload(file);
                   }}
                 />
+              </div>
+
+              <div>
+                <label className="mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                  Category
+                </label>
+                <select
+                  required={itemModalMode === 'add'}
+                  value={itemForm.categoryId ?? ''}
+                  onChange={(e) =>
+                    setItemForm((f) => ({ ...f, categoryId: e.target.value || null }))
+                  }
+                  className="w-full rounded-[10px] border border-border bg-scrim-2 px-4 py-3 font-body text-[17px] focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {itemModalMode === 'edit' ? (
+                    <option value="">Uncategorized</option>
+                  ) : null}
+                  {categories
+                    .filter((c) => c.id !== '__uncat__')
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
               </div>
 
               <div>
@@ -480,6 +605,16 @@ export default function MenuPage() {
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="checkbox"
+                  checked={itemForm.isAvailable}
+                  onChange={(e) => setItemForm((f) => ({ ...f, isAvailable: e.target.checked }))}
+                  className="rounded border-border"
+                />
+                <span className="font-body text-sm text-foreground">Available on menu (not 86&apos;d)</span>
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
                   checked={itemForm.isPopular}
                   onChange={(e) => setItemForm((f) => ({ ...f, isPopular: e.target.checked }))}
                   className="rounded border-border"
@@ -498,7 +633,7 @@ export default function MenuPage() {
               <div className="flex gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={() => setShowAddItem(false)}
+                  onClick={closeItemModal}
                   className="flex-1 rounded-xl border border-border py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors hover:bg-scrim-2"
                 >
                   Cancel
@@ -508,10 +643,51 @@ export default function MenuPage() {
                   disabled={savingItem || uploadingPhoto}
                   className="flex-1 rounded-xl bg-primary py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-primary-foreground transition-colors hover:bg-amber-light disabled:opacity-50"
                 >
-                  {savingItem ? 'Saving...' : 'Add item'}
+                  {savingItem ? 'Saving...' : itemModalMode === 'edit' ? 'Save changes' : 'Add item'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Close"
+            onClick={() => !deletingItem && setDeleteTarget(null)}
+          />
+          <div className="relative w-full max-w-md rounded-t-[14px] border border-border bg-card p-6 shadow-xl sm:rounded-[14px]">
+            <h2 className="mb-2 font-display text-xl font-light text-foreground">Remove menu item?</h2>
+            <p className="mb-4 font-body text-sm text-muted-foreground">
+              &quot;{deleteTarget.name}&quot; will be removed permanently if it has never been ordered. Items with
+              order history cannot be deleted — use 86 instead.
+            </p>
+            {deleteError && (
+              <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {deleteError}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={deletingItem}
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 rounded-xl border border-border py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors hover:bg-scrim-2 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingItem}
+                onClick={() => void confirmDeleteItem()}
+                className="flex-1 rounded-xl bg-destructive py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-destructive/90 disabled:opacity-50"
+              >
+                {deletingItem ? 'Removing...' : 'Remove'}
+              </button>
+            </div>
           </div>
         </div>
       )}

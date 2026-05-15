@@ -93,6 +93,18 @@ export async function DELETE(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
+  const orderCount = await prisma.orderItem.count({ where: { menuItemId: id } })
+  if (orderCount > 0) {
+    return NextResponse.json(
+      {
+        error:
+          'This item has order history and cannot be deleted. Use 86 to hide it from the menu instead.',
+        code: 'HAS_ORDER_HISTORY',
+      },
+      { status: 409 },
+    )
+  }
+
   await prisma.menuItem.delete({ where: { id } })
 
   return NextResponse.json({ success: true })
