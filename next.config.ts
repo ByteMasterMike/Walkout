@@ -22,23 +22,18 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
-              // Styles: self + Google Fonts
+              // Stripe.js loads auxiliary scripts / telemetry from m.stripe.network and connects to q.stripe.com.
+              // Without these, Payment Element can mount empty in the browser with CSP violations in the console.
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://m.stripe.network",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              // Fonts: self + Google Fonts CDN
               "font-src 'self' https://fonts.gstatic.com",
-              "img-src 'self' data: blob: https://images.walkoutofficial.com",
+              "img-src 'self' data: blob: https://images.walkoutofficial.com https://*.stripe.com",
               "media-src 'self'",
-              // API calls: self + external APIs
-              "connect-src 'self' https://*.supabase.com https://generativelanguage.googleapis.com https://api.stripe.com https://*.stripe.com",
-              "frame-src https://js.stripe.com https://hooks.stripe.com",
-              // No iframes embedding this app
+              "connect-src 'self' https://*.supabase.com https://generativelanguage.googleapis.com https://api.stripe.com https://*.stripe.com https://m.stripe.network https://*.stripe.network https://q.stripe.com https://errors.stripe.com",
+              "frame-src https://js.stripe.com https://hooks.stripe.com https://m.stripe.network",
               "frame-ancestors 'none'",
-              // No plugins
               "object-src 'none'",
-              // Base URI locked to self
               "base-uri 'self'",
-              // Forms only submit to self
               "form-action 'self'",
             ].join('; '),
           },

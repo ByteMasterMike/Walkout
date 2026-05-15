@@ -10,6 +10,35 @@ const HoldSchema = z.object({
   stripePaymentMethodId: z.string().min(1), // pm_... returned from SetupIntent confirmation
 });
 
+/** Rich errors for debugging (dev, preview, or `WALKOUT_PAYMENT_DEBUG=true` on the server). */
+function paymentDebugEnabled(): boolean {
+  const v = process.env.WALKOUT_PAYMENT_DEBUG?.toLowerCase();
+  return (
+    process.env.NODE_ENV !== 'production' ||
+    v === '1' ||
+    v === 'true' ||
+    v === 'yes'
+  );
+}
+
+function stripeErrorDetails(err: {
+  type?: string;
+  code?: string;
+  decline_code?: string;
+  message?: string;
+  requestId?: string;
+  param?: string;
+}): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  if (err.type) out.type = err.type;
+  if (err.code) out.code = err.code;
+  if (err.decline_code) out.decline_code = err.decline_code;
+  if (err.message) out.message = err.message;
+  if (err.requestId) out.requestId = err.requestId;
+  if (err.param) out.param = err.param;
+  return Object.keys(out).length ? out : undefined;
+}
+
 /**
  * POST /api/sessions/[sessionId]/hold
  *
@@ -207,7 +236,16 @@ export async function POST(
         where: { id: participantId },
         data: { holdStatus: 'FAILED' },
       });
-      return NextResponse.json({ status: 'failed', error: 'Card declined' }, { status: 402 });
+      const debug = paymentDebugEnabled();
+      const details = stripeErrorDetails(stripeError);
+      return NextResponse.json(
+        {
+          status: 'failed',
+          error: 'Card declined',
+          ...(debug && details ? { details } : {}),
+        },
+        { status: 402 }
+      );
     }
 
     console.error('[hold] Stripe error', {
@@ -219,13 +257,15 @@ export async function POST(
       message: stripeError.message,
     });
 
-    // In non-production, include the Stripe code so we can debug without server logs.
-    const safeError =
-      process.env.NODE_ENV === 'production'
-        ? 'Payment processing failed'
-        : `Payment processing failed (${stripeError.code ?? stripeError.type ?? 'unknown'})`;
-
-    return NextResponse.json({ error: safeError }, { status: 500 });
+    const debug = paymentDebugEnabled();
+    const details = stripeErrorDetails(stripeError);
+    return NextResponse.json(
+      {
+        error: 'Payment processing failed',
+        ...(debug && details ? { details } : {}),
+      },
+      { status: 500 }
+    );
   }
 
   // ── Handle PaymentIntent status ───────────────────────────────────────────
@@ -261,5 +301,22 @@ export async function POST(
     where: { id: participantId },
     data: { holdStatus: 'FAILED' },
   });
-  return NextResponse.json({ status: 'failed', error: 'Card declined' }, { status: 402 });
+  const debug = paymentDebugEnabled();
+  const lpe = paymentIntent.last_payment_error;
+  const lpeDetails =
+    lpe &&
+    stripeErrorDetails({
+      code: lpe.code ?? undefined,
+      decline_code: lpe.decline_code ?? undefined,
+      message: lpe.message ?? undefined,
+      type: lpe.type ?? undefined,
+    });
+  return NextResponse.json(
+    {
+      status: 'failed',
+      error: 'Card declined',
+      ...(debug && lpeDetails ? { details: lpeDetails } : {}),
+    },
+    { status: 402 }
+  );
 }

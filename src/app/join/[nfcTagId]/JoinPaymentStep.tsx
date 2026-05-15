@@ -60,6 +60,7 @@ export default function JoinPaymentStep({ sessionId, participantId, setupClientS
         status?: string;
         clientSecret?: string;
         error?: string;
+        details?: Record<string, string>;
       };
 
       if (parsed.status === 'requires_action' && parsed.clientSecret) {
@@ -76,11 +77,21 @@ export default function JoinPaymentStep({ sessionId, participantId, setupClientS
       }
 
       if (!res.ok || parsed.status === 'failed') {
-        setError(
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[join-payment] /hold failed', { httpStatus: res.status, body: parsed });
+        }
+        const base =
           typeof parsed.error === 'string'
             ? parsed.error
-            : 'Could not place card hold. Please try again.',
-        );
+            : 'Could not place card hold. Please try again.';
+        const detailStr =
+          parsed.details && typeof parsed.details === 'object'
+            ? Object.entries(parsed.details)
+                .filter(([, v]) => typeof v === 'string' && v.length > 0)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(' · ')
+            : '';
+        setError(detailStr ? `${base} (${detailStr})` : base);
         return;
       }
 

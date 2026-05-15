@@ -106,10 +106,17 @@ export default function JoinPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold text-gray-900">Welcome</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Enter your name to open a tab. A{' '}
-            <span className="font-medium">$75 hold</span> will appear on your card — you only pay for what you order.
-          </p>
+          {step === 'form' ? (
+            <p className="mt-1 text-sm text-gray-500">
+              Enter your name to open a tab. A{' '}
+              <span className="font-medium">$75 hold</span> will appear on your card — you only pay for what you order.
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-gray-500">
+              Add a card on file for your tab. A <span className="font-medium">temporary hold</span> may show on your
+              statement until you close out — you only pay for what you order.
+            </p>
+          )}
         </div>
 
         {step === 'form' && (

@@ -28,6 +28,16 @@ export default function Navbar() {
   const { theme, toggle } = useTheme();
   const pathname = usePathname() ?? '';
 
+  // Diner flows are full-screen; keep marketing/owner chrome out of /join and /tab.
+  const hideDinerChrome =
+    pathname.startsWith('/join/') ||
+    pathname.startsWith('/tab/') ||
+    pathname.startsWith('/pay/') ||
+    pathname.startsWith('/rejoin/');
+  if (hideDinerChrome) {
+    return null;
+  }
+
   const role = session?.user?.role;
   const isStaff = role === 'ADMIN' || role === 'MANAGER' || role === 'STAFF';
   const isDiner = role === 'DINER';

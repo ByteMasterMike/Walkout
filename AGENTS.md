@@ -1,6 +1,7 @@
 ## Learned User Preferences
 
 - When the user says "push" after implementation work, they expect the agent to run `git add`, `git commit`, and `git push` locally when the change set is clear, not only describe the git steps.
+- Default to Cursor-oriented setup and docs (`.cursor/`, Cursor rules/manuals tied to Cursor). Do not lean on Claude-specific paths (`CLAUDE.md`, `.claude/`) unless the user asks to update them.
 
 ## Learned Workspace Facts
 
