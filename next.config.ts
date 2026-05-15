@@ -25,8 +25,11 @@ const nextConfig: NextConfig = {
               // Stripe.js loads auxiliary scripts / telemetry from m.stripe.network and connects to q.stripe.com.
               // Without these, Payment Element can mount empty in the browser with CSP violations in the console.
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://m.stripe.network",
+              // External <link rel="stylesheet"> (Google Fonts CSS + Stripe-injected font links) is governed by
+              // style-src-elem in Chromium; without it, fonts.googleapis.com/css2 can be blocked despite style-src.
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              "font-src 'self' https://fonts.gstatic.com",
+              "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: blob: https://images.walkoutofficial.com https://*.stripe.com",
               "media-src 'self'",
               "connect-src 'self' https://*.supabase.com https://generativelanguage.googleapis.com https://api.stripe.com https://*.stripe.com https://m.stripe.network https://*.stripe.network https://q.stripe.com https://errors.stripe.com",

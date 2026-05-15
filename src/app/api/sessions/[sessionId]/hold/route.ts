@@ -21,6 +21,44 @@ function paymentDebugEnabled(): boolean {
   );
 }
 
+/** Normalize Stripe Node SDK throws (`code`/`param` often live on `raw`). */
+function normalizeStripeThrown(err: unknown): {
+  type?: string;
+  code?: string;
+  decline_code?: string;
+  message?: string;
+  requestId?: string;
+  param?: string;
+  detail?: string;
+  doc_url?: string;
+  statusCode?: number;
+} {
+  if (!err || typeof err !== 'object') return {};
+  const e = err as Record<string, unknown>;
+  const raw =
+    e.raw && typeof e.raw === 'object' && !Array.isArray(e.raw)
+      ? (e.raw as Record<string, unknown>)
+      : {};
+  const inner =
+    raw.error && typeof raw.error === 'object' && !Array.isArray(raw.error)
+      ? (raw.error as Record<string, unknown>)
+      : {};
+  const pickStr = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : undefined);
+  const pickNum = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+  return {
+    type: pickStr(e.type),
+    code: pickStr(e.code) ?? pickStr(inner.code) ?? pickStr(raw.code),
+    decline_code: pickStr(e.decline_code) ?? pickStr(inner.decline_code) ?? pickStr(raw.decline_code),
+    message: pickStr(e.message) ?? pickStr(inner.message) ?? pickStr(raw.message),
+    requestId: pickStr(e.requestId) ?? pickStr(raw.request_id),
+    param: pickStr(e.param) ?? pickStr(inner.param) ?? pickStr(raw.param),
+    detail: pickStr(e.detail) ?? pickStr(inner.detail) ?? pickStr(raw.detail),
+    doc_url: pickStr(e.doc_url) ?? pickStr(inner.doc_url) ?? pickStr(raw.doc_url),
+    statusCode: pickNum(e.statusCode),
+  };
+}
+
 /** Stripe codes/types are safe to surface to the browser; raw messages may embed ids — gate those separately. */
 function stripeDiagnostics(
   err: {
@@ -30,6 +68,9 @@ function stripeDiagnostics(
     message?: string;
     requestId?: string;
     param?: string;
+    detail?: string;
+    doc_url?: string;
+    statusCode?: number;
   },
   opts: {
     verbose: boolean;
@@ -42,6 +83,9 @@ function stripeDiagnostics(
   if (err.code) out.code = err.code;
   if (err.decline_code) out.decline_code = err.decline_code;
   if (err.param) out.param = err.param;
+  if (err.detail) out.detail = err.detail;
+  if (err.doc_url) out.doc_url = err.doc_url;
+  if (err.statusCode != null) out.httpStatus = String(err.statusCode);
   const msg = err.message?.trim();
   if (msg && (opts.verbose || opts.exposeStripeMessage)) out.message = msg;
   if (opts.verbose && err.requestId) out.requestId = err.requestId;
@@ -231,14 +275,7 @@ export async function POST(
       }
     );
   } catch (err: unknown) {
-    const stripeError = err as {
-      type?: string;
-      code?: string;
-      decline_code?: string;
-      param?: string;
-      message?: string;
-      requestId?: string;
-    };
+    const stripeError = normalizeStripeThrown(err);
 
     if (stripeError.type === 'StripeCardError') {
       await prisma.tabParticipant.update({
