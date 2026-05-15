@@ -11,7 +11,7 @@ export async function GET() {
   const requests = await prisma.serviceRequest.findMany({
     where: {
       restaurantId: session.user.restaurantId,
-      status: { in: ['OPEN', 'ACKNOWLEDGED', 'RESOLVED'] },
+      status: { in: ['OPEN', 'ACKNOWLEDGED'] },
     },
     orderBy: { createdAt: 'desc' },
     take: 150,

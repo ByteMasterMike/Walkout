@@ -56,8 +56,7 @@ function playChime(ctx: AudioContext) {
 }
 
 function sortRequestsForUi(reqs: ServiceRequest[]): ServiceRequest[] {
-  const order = (s: ServiceReqStatus) =>
-    s === 'OPEN' ? 0 : s === 'ACKNOWLEDGED' ? 1 : s === 'RESOLVED' ? 2 : 3;
+  const order = (s: ServiceReqStatus) => (s === 'OPEN' ? 0 : s === 'ACKNOWLEDGED' ? 1 : 99);
   return [...reqs].sort((a, b) => {
     const d = order(a.status) - order(b.status);
     if (d !== 0) return d;
@@ -170,7 +169,6 @@ export default function RequestsPage() {
 
   const open = requests.filter((r) => r.status === 'OPEN');
   const acknowledged = requests.filter((r) => r.status === 'ACKNOWLEDGED');
-  const resolved = requests.filter((r) => r.status === 'RESOLVED');
 
   return (
     <PageShell>
@@ -202,7 +200,7 @@ export default function RequestsPage() {
 
       {requests.length === 0 ? (
         <div className="py-16 text-center">
-          <p className="font-body text-muted-foreground">No open requests.</p>
+          <p className="font-body text-muted-foreground">No active requests.</p>
         </div>
       ) : (
         <div className="req-list">
@@ -211,10 +209,6 @@ export default function RequestsPage() {
           ))}
 
           {acknowledged.map((req) => (
-            <RequestRow key={req.id} req={req} onAcknowledge={acknowledge} onResolve={resolve} />
-          ))}
-
-          {resolved.slice(0, 10).map((req) => (
             <RequestRow key={req.id} req={req} onAcknowledge={acknowledge} onResolve={resolve} />
           ))}
         </div>
@@ -232,13 +226,12 @@ function RequestRow({
   onAcknowledge: (id: string) => void;
   onResolve: (id: string) => void;
 }) {
-  const isResolved = req.status === 'RESOLVED';
   const isOpen = req.status === 'OPEN';
   const isAcknowledged = req.status === 'ACKNOWLEDGED';
 
   return (
     <div
-      className={`req ${isAcknowledged || isResolved ? 'ack' : ''} ${isResolved ? '!opacity-50' : ''} flex-wrap sm:flex-nowrap`}
+      className={`req ${isAcknowledged ? 'ack' : ''} flex-wrap sm:flex-nowrap`}
     >
       <div className="dot" />
       <div className="body">
@@ -273,7 +266,6 @@ function RequestRow({
             Mark Resolved
           </button>
         )}
-        {isResolved && <span className="font-mono text-[10px] text-muted-foreground">Done</span>}
       </div>
     </div>
   );
