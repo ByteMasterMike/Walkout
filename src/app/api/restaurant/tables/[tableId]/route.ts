@@ -129,3 +129,51 @@ export async function GET(
     serviceRequests,
   });
 }
+
+/**
+ * DELETE /api/restaurant/tables/[tableId]
+ * Remove a table only when it has never hosted a tab session (owner setup correction).
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ tableId: string }> },
+) {
+  const session = await auth();
+  if (!session?.user?.restaurantId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (session.user.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { tableId } = await params;
+  const invalid = validateUuid(tableId, 'tableId');
+  if (invalid) return invalid;
+
+  const table = await prisma.diningTable.findFirst({
+    where: { id: tableId, restaurantId: session.user.restaurantId },
+    select: { id: true },
+  });
+  if (!table) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const sessionCount = await prisma.tabSession.count({ where: { tableId } });
+  if (sessionCount > 0) {
+    return NextResponse.json(
+      {
+        error:
+          'This table has tab session history and cannot be deleted. Only tables that have never hosted a tab can be removed.',
+        code: 'HAS_TAB_HISTORY',
+      },
+      { status: 409 },
+    );
+  }
+
+  await prisma.$transaction([
+    prisma.tableAssignment.deleteMany({ where: { tableId } }),
+    prisma.diningTable.delete({ where: { id: tableId } }),
+  ]);
+
+  return NextResponse.json({ success: true });
+}

@@ -37,7 +37,7 @@ export default function SetupPage() {
   const [error, setError] = useState('');
 
   async function loadTables() {
-    const res = await fetch('/api/restaurant/tables');
+    const res = await fetch('/api/restaurant/tables', { credentials: 'include' });
     if (res.ok) {
       const data = await res.json();
       setTables(data.tables);
@@ -46,12 +46,17 @@ export default function SetupPage() {
 
   useEffect(() => { loadTables(); }, []);
 
+  const [deleteTarget, setDeleteTarget] = useState<DiningTable | null>(null);
+  const [deletingTable, setDeletingTable] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
     const res = await fetch('/api/restaurant/tables', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tableNumber: newTable }),
     });
@@ -63,6 +68,35 @@ export default function SetupPage() {
       await loadTables();
     }
     setLoading(false);
+  }
+
+  async function confirmDeleteTable() {
+    if (!deleteTarget) return;
+    setDeletingTable(true);
+    setDeleteError('');
+    try {
+      const res = await fetch(`/api/restaurant/tables/${deleteTarget.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (res.status === 409) {
+        setDeleteError(
+          typeof body.error === 'string'
+            ? body.error
+            : 'This table cannot be deleted because it has tab history.',
+        );
+        return;
+      }
+      if (!res.ok) {
+        setDeleteError(typeof body.error === 'string' ? body.error : 'Could not remove table.');
+        return;
+      }
+      setDeleteTarget(null);
+      await loadTables();
+    } finally {
+      setDeletingTable(false);
+    }
   }
 
   return (
@@ -140,10 +174,62 @@ export default function SetupPage() {
                   >
                     QR code
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError('');
+                      setDeleteTarget(t);
+                    }}
+                    className="rounded-full border border-destructive/40 px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-destructive/90 transition-colors hover:bg-destructive/10"
+                  >
+                    Remove
+                  </button>
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Close"
+            onClick={() => !deletingTable && setDeleteTarget(null)}
+          />
+          <div className="relative w-full max-w-md rounded-t-[14px] border border-border bg-card p-6 shadow-xl sm:rounded-[14px]">
+            <h2 className="mb-2 font-display text-xl font-light text-foreground">Remove table?</h2>
+            <p className="mb-4 font-body text-sm text-muted-foreground">
+              Table &quot;{deleteTarget.tableNumber}&quot; and its join URL will be removed permanently.
+              You can only delete tables that have{' '}
+              <strong className="font-medium text-foreground">never</strong> hosted a diner tab.
+            </p>
+            {deleteError && (
+              <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {deleteError}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={deletingTable}
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 rounded-xl border border-border py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors hover:bg-scrim-2 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingTable}
+                onClick={() => void confirmDeleteTable()}
+                className="flex-1 rounded-xl bg-destructive py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-destructive/90 disabled:opacity-50"
+              >
+                {deletingTable ? 'Removing...' : 'Remove table'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
