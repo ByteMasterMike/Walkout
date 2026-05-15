@@ -1,8 +1,13 @@
 import Decimal from 'decimal.js';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { validateUuid } from '@/lib/validate';
+
+const PatchTableSchema = z.object({
+  isActive: z.boolean(),
+});
 
 /**
  * GET /api/restaurant/tables/[tableId]
@@ -128,6 +133,62 @@ export async function GET(
     participants,
     serviceRequests,
   });
+}
+
+/**
+ * PATCH /api/restaurant/tables/[tableId]
+ * Hide or restore a table on the floor (`isActive`). Join NFC rejects inactive tables.
+ */
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ tableId: string }> },
+) {
+  const session = await auth();
+  if (!session?.user?.restaurantId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (session.user.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { tableId } = await params;
+  const invalid = validateUuid(tableId, 'tableId');
+  if (invalid) return invalid;
+
+  const existing = await prisma.diningTable.findFirst({
+    where: { id: tableId, restaurantId: session.user.restaurantId },
+    select: { id: true },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const parsed = PatchTableSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+  }
+
+  const updated = await prisma.diningTable.update({
+    where: { id: tableId },
+    data: { isActive: parsed.data.isActive },
+    select: {
+      id: true,
+      tableNumber: true,
+      nfcTagId: true,
+      status: true,
+      createdAt: true,
+      isActive: true,
+    },
+  });
+
+  return NextResponse.json({ table: updated });
 }
 
 /**

@@ -13,6 +13,7 @@ type DiningTable = {
   nfcTagId: string;
   status: string;
   createdAt: string;
+  isActive: boolean;
 };
 
 function getNfcUrl(nfcTagId: string) {
@@ -37,9 +38,9 @@ export default function SetupPage() {
   const [error, setError] = useState('');
 
   async function loadTables() {
-    const res = await fetch('/api/restaurant/tables', { credentials: 'include' });
+    const res = await fetch('/api/restaurant/tables?includeInactive=true', { credentials: 'include' });
     if (res.ok) {
-      const data = await res.json();
+      const data = (await res.json()) as { tables: DiningTable[] };
       setTables(data.tables);
     }
   }
@@ -49,6 +50,9 @@ export default function SetupPage() {
   const [deleteTarget, setDeleteTarget] = useState<DiningTable | null>(null);
   const [deletingTable, setDeletingTable] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [hideTarget, setHideTarget] = useState<DiningTable | null>(null);
+  const [hideBusy, setHideBusy] = useState(false);
+  const [patchingTableId, setPatchingTableId] = useState<string | null>(null);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -99,6 +103,56 @@ export default function SetupPage() {
     }
   }
 
+  async function patchTableActive(
+    tableId: string,
+    isActive: boolean,
+  ): Promise<{ ok: boolean; message?: string }> {
+    setPatchingTableId(tableId);
+    try {
+      const res = await fetch(`/api/restaurant/tables/${tableId}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        const msg = typeof body.error === 'string' ? body.error : 'Could not update table.';
+        return { ok: false, message: msg };
+      }
+      await loadTables();
+      return { ok: true };
+    } finally {
+      setPatchingTableId(null);
+    }
+  }
+
+  async function confirmHideTable() {
+    if (!hideTarget) return;
+    setHideBusy(true);
+    setError('');
+    try {
+      const r = await patchTableActive(hideTarget.id, false);
+      if (!r.ok) setError(r.message ?? 'Could not hide table.');
+      else setHideTarget(null);
+    } finally {
+      setHideBusy(false);
+    }
+  }
+
+  async function hideInsteadFromDeleteModal() {
+    if (!deleteTarget) return;
+    setDeletingTable(true);
+    setDeleteError('');
+    try {
+      const r = await patchTableActive(deleteTarget.id, false);
+      if (!r.ok) setDeleteError(r.message ?? 'Could not hide table.');
+      else setDeleteTarget(null);
+    } finally {
+      setDeletingTable(false);
+    }
+  }
+
   return (
     <PageShell>
       <PageHead
@@ -109,8 +163,8 @@ export default function SetupPage() {
         }
         subtitle={
           <>
-            Create tables and get NFC tag URLs. Program each NFC sticker with its URL using an NFC
-            writer app.
+            Create tables and NFC join URLs. Hide tables you no longer use (guests cannot join while
+            hidden); remove only clears unused tables with no tab history.
           </>
         }
         actions={
@@ -150,45 +204,119 @@ export default function SetupPage() {
       {tables.length === 0 ? (
         <p className="py-10 text-center font-body text-sm text-muted-foreground">No tables yet. Add one above.</p>
       ) : (
-        <div className="space-y-0">
-          {tables.map((t) => {
-            const url = getNfcUrl(t.nfcTagId);
+        <>
+          {(() => {
+            const activeTables = tables.filter((t) => t.isActive);
+            const hiddenTables = tables.filter((t) => !t.isActive);
+
+            function renderRow(t: DiningTable, variant: 'active' | 'hidden') {
+              const url = getNfcUrl(t.nfcTagId);
+              const busy = patchingTableId === t.id;
+              return (
+                <div
+                  key={t.id}
+                  className={`url-row ${variant === 'hidden' ? 'opacity-75' : ''}`}
+                >
+                  <div className="l">
+                    <div className="t">
+                      Table {t.tableNumber}
+                      {variant === 'hidden' ? (
+                        <span className="ml-2 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                          · Hidden
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="u">{url}</div>
+                  </div>
+                  <div className="r flex-wrap">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => navigator.clipboard.writeText(url)}
+                      className="rounded-full border border-border px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-foreground transition-colors hover:bg-scrim-2 disabled:opacity-50"
+                    >
+                      Copy URL
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => downloadQr(t.nfcTagId, t.tableNumber)}
+                      className="rounded-full bg-invert px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-invert-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                    >
+                      QR code
+                    </button>
+                    {variant === 'active' ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setHideTarget(t);
+                          }}
+                          className="rounded-full border border-border px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary hover:text-foreground disabled:opacity-50"
+                        >
+                          Hide
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setDeleteError('');
+                            setDeleteTarget(t);
+                          }}
+                          className="rounded-full border border-destructive/40 px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-destructive/90 transition-colors hover:bg-destructive/10 disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void patchTableActive(t.id, true).then((r) => {
+                            if (!r.ok) setError(r.message ?? 'Could not restore table.');
+                            else setError('');
+                          })
+                        }
+                        className="rounded-full border border-moss/50 bg-moss/15 px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-moss transition-colors hover:bg-moss/25 disabled:opacity-50"
+                      >
+                        Restore
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
             return (
-              <div key={t.id} className="url-row">
-                <div className="l">
-                  <div className="t">Table {t.tableNumber}</div>
-                  <div className="u">{url}</div>
+              <div className="space-y-8">
+                <div className="space-y-0">
+                  {activeTables.length === 0 ? (
+                    <p className="py-6 text-center font-body text-sm text-muted-foreground">
+                      No active tables.{hiddenTables.length > 0 ? ' Restore one below or add a new table.' : ''}
+                    </p>
+                  ) : (
+                    activeTables.map((t) => renderRow(t, 'active'))
+                  )}
                 </div>
-                <div className="r">
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(url)}
-                    className="rounded-full border border-border px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-foreground transition-colors hover:bg-scrim-2"
-                  >
-                    Copy URL
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => downloadQr(t.nfcTagId, t.tableNumber)}
-                    className="rounded-full bg-invert px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-invert-foreground transition-opacity hover:opacity-90"
-                  >
-                    QR code
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeleteError('');
-                      setDeleteTarget(t);
-                    }}
-                    className="rounded-full border border-destructive/40 px-3 py-1.5 font-mono text-[9px] font-medium uppercase tracking-wider text-destructive/90 transition-colors hover:bg-destructive/10"
-                  >
-                    Remove
-                  </button>
-                </div>
+
+                {hiddenTables.length > 0 ? (
+                  <div>
+                    <p className="mb-3 font-mono text-[9px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                      Hidden tables
+                    </p>
+                    <p className="mb-3 font-body text-sm text-muted-foreground">
+                      Diners cannot join via NFC while a table is hidden. URLs stay the same when you
+                      restore.
+                    </p>
+                    <div className="space-y-0">{hiddenTables.map((t) => renderRow(t, 'hidden'))}</div>
+                  </div>
+                ) : null}
               </div>
             );
-          })}
-        </div>
+          })()}
+        </>
       )}
 
       {deleteTarget && (
@@ -211,7 +339,18 @@ export default function SetupPage() {
                 {deleteError}
               </p>
             )}
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3">
+              {deleteError ? (
+                <button
+                  type="button"
+                  disabled={deletingTable}
+                  onClick={() => void hideInsteadFromDeleteModal()}
+                  className="w-full rounded-xl border border-border py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors hover:bg-scrim-2 disabled:opacity-50"
+                >
+                  Hide table instead
+                </button>
+              ) : null}
+              <div className="flex gap-3">
               <button
                 type="button"
                 disabled={deletingTable}
@@ -227,6 +366,44 @@ export default function SetupPage() {
                 className="flex-1 rounded-xl bg-destructive py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-destructive/90 disabled:opacity-50"
               >
                 {deletingTable ? 'Removing...' : 'Remove table'}
+              </button>
+            </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hideTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Close"
+            onClick={() => !hideBusy && setHideTarget(null)}
+          />
+          <div className="relative w-full max-w-md rounded-t-[14px] border border-border bg-card p-6 shadow-xl sm:rounded-[14px]">
+            <h2 className="mb-2 font-display text-xl font-light text-foreground">Hide table?</h2>
+            <p className="mb-4 font-body text-sm text-muted-foreground">
+              Table &quot;{hideTarget.tableNumber}&quot; stays in your account but disappears from Live Tables and
+              Floor Setup. Diners who tap this table&apos;s NFC tag will not be able to join until you
+              restore it.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={hideBusy}
+                onClick={() => setHideTarget(null)}
+                className="flex-1 rounded-xl border border-border py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors hover:bg-scrim-2 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={hideBusy}
+                onClick={() => void confirmHideTable()}
+                className="flex-1 rounded-xl bg-invert py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-invert-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {hideBusy ? 'Hiding...' : 'Hide table'}
               </button>
             </div>
           </div>
