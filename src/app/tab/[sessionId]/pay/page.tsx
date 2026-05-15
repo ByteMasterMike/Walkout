@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import Decimal from 'decimal.js';
@@ -18,6 +18,12 @@ type SessionPayload = {
   };
 };
 
+type TipPromptPayload = {
+  tipToken: string;
+  maxTipCents: number;
+  subtotalCents: number;
+};
+
 type OrderRow = {
   id: string;
   participantId: string;
@@ -28,6 +34,15 @@ type OrderRow = {
   status: string;
 };
 
+type SessionApiResponse = SessionPayload & {
+  orders: OrderRow[];
+  tipPrompt?: TipPromptPayload | null;
+};
+
+function sessionNeedsTipChoice(status: string, prompt: TipPromptPayload | null): boolean {
+  return Boolean(prompt && ['AWAITING_TIP', 'CAPTURING', 'OPEN'].includes(status));
+}
+
 export default function TabPayPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const router = useRouter();
@@ -37,9 +52,12 @@ export default function TabPayPage() {
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<SessionPayload['session'] | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [tipPrompt, setTipPrompt] = useState<TipPromptPayload | null>(null);
+  const [awaitingTipChoice, setAwaitingTipChoice] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [cashLoading, setCashLoading] = useState(false);
+  const [tipSubmitLoading, setTipSubmitLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [cashSuccess, setCashSuccess] = useState(false);
 
@@ -57,28 +75,35 @@ export default function TabPayPage() {
     }
   }, [sessionId]);
 
-  useEffect(() => {
-    if (!participantId || !sessionId) {
-      return;
-    }
+  const applySessionPayload = useCallback((data: SessionApiResponse, pid: string) => {
+    setSession(data.session);
+    const mine = data.orders.filter((o) => o.participantId === pid);
+    setOrders(mine);
+    const prompt = data.tipPrompt ?? null;
+    setTipPrompt(prompt);
+    setAwaitingTipChoice(sessionNeedsTipChoice(data.session.status, prompt));
+  }, []);
 
+  useEffect(() => {
     let cancelled = false;
 
     async function load() {
+      const pid = participantId;
+      const sid = sessionId;
+      if (!pid || !sid) {
+        return;
+      }
+
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/sessions/${sessionId}`);
+        const res = await fetch(`/api/sessions/${sid}`);
         if (!res.ok) {
           throw new Error('Could not load your tab.');
         }
-        const data = (await res.json()) as SessionPayload & {
-          orders: OrderRow[];
-        };
+        const data = (await res.json()) as SessionApiResponse;
         if (cancelled) return;
-        setSession(data.session);
-        const mine = data.orders.filter((o) => o.participantId === participantId);
-        setOrders(mine);
+        applySessionPayload(data, pid);
       } catch {
         if (!cancelled) setError('Could not load your tab.');
       } finally {
@@ -90,7 +115,7 @@ export default function TabPayPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, participantId]);
+  }, [sessionId, participantId, applySessionPayload]);
 
   const activeOrders = orders.filter((o) => o.status !== 'CANCELLED' && o.status !== 'CASH_PENDING');
 
@@ -134,23 +159,67 @@ export default function TabPayPage() {
   }
 
   async function runCheckout() {
-    if (!participantId || !sessionId) return;
+    const pid = participantId;
+    const sid = sessionId;
+    if (!pid || !sid) return;
     setCheckoutLoading(true);
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/checkout`, {
+      const res = await fetch(`/api/sessions/${sid}/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantId }),
+        body: JSON.stringify({ participantId: pid }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError((body as { error?: string }).error ?? 'Checkout failed.');
         return;
       }
-      setDone(true);
+      const refresh = await fetch(`/api/sessions/${sid}`);
+      if (!refresh.ok) {
+        setDone(true);
+        return;
+      }
+      const data = (await refresh.json()) as SessionApiResponse;
+      applySessionPayload(data, pid);
+      if (!data.tipPrompt) {
+        setDone(true);
+      }
     } finally {
       setCheckoutLoading(false);
     }
+  }
+
+  async function submitTip(tipCents: number, tipSource: 'DINER_CHOICE' | 'DINER_DECLINED') {
+    if (!participantId || !sessionId || !tipPrompt) return;
+    const capped = Math.min(Math.max(0, tipCents), tipPrompt.maxTipCents);
+    setTipSubmitLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/tip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          participantId,
+          tipToken: tipPrompt.tipToken,
+          tipCents: tipSource === 'DINER_DECLINED' ? 0 : capped,
+          tipSource,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError((body as { error?: string }).error ?? 'Could not finalize payment.');
+        return;
+      }
+      setAwaitingTipChoice(false);
+      setDone(true);
+    } finally {
+      setTipSubmitLoading(false);
+    }
+  }
+
+  function tipFromPercent(pct: number): number {
+    if (!tipPrompt) return 0;
+    return Math.min(Math.round((tipPrompt.subtotalCents * pct) / 100), tipPrompt.maxTipCents);
   }
 
   if (loading) {
@@ -199,17 +268,74 @@ export default function TabPayPage() {
             </svg>
           </div>
           <h1 className="text-xl font-bold text-gray-900 mb-2">You&apos;re all set</h1>
-          <p className="text-sm text-gray-600 mb-2">
-            We&apos;ll charge your card for{' '}
-            <span className="font-semibold text-gray-900">${totalBeforeTip.toFixed(2)}</span> plus tip when you choose
-            an amount (or after the tip window ends).
-          </p>
-          <p className="text-xs text-gray-400 mb-6">
-            You may receive a text with a link to add your tip. Thank you for dining with {session.restaurantName}.
+          <p className="text-sm text-gray-600 mb-6">
+            Your payment has been submitted for{' '}
+            <span className="font-semibold text-gray-900">${totalBeforeTip.toFixed(2)}</span> plus any tip you chose.
+            Your bank may show the charge shortly. Thanks for dining with {session.restaurantName}.
           </p>
           <Link href="/" className="block w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 text-center">
             Done
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (awaitingTipChoice && session && tipPrompt && participantId) {
+    const maxTip = tipPrompt.maxTipCents / 100;
+    return (
+      <div className="min-h-screen bg-gray-50 pb-28">
+        <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-4">
+          <div className="max-w-lg mx-auto">
+            <h1 className="text-lg font-bold text-gray-900">Add a tip</h1>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Table {session.tableNumber} · {session.restaurantName}
+            </p>
+          </div>
+        </header>
+
+        <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{error}</div>
+          )}
+
+          <div className="bg-white border border-gray-200 rounded-2xl px-4 py-4 space-y-2 text-sm">
+            <div className="flex justify-between font-semibold text-gray-900 pt-1 border-b border-gray-100 pb-3 mb-2">
+              <span>Food &amp; fees (before tip)</span>
+              <span>${totalBeforeTip.toFixed(2)}</span>
+            </div>
+            <p className="text-xs text-gray-500">
+              Tips are capped at 50% of your food subtotal (up to ${maxTip.toFixed(2)} on this tab).
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {[15, 18, 20].map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                disabled={tipSubmitLoading}
+                onClick={() => void submitTip(tipFromPercent(pct), 'DINER_CHOICE')}
+                className="py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 disabled:opacity-50"
+              >
+                {pct}%
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            disabled={tipSubmitLoading}
+            onClick={() => void submitTip(0, 'DINER_DECLINED')}
+            className="w-full py-3 rounded-xl border border-gray-300 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-50"
+          >
+            No tip
+          </button>
+
+          <p className="text-xs text-center text-gray-400">
+            Having trouble? You can close this screen — if configured, you may still get a text link, or charges finalize
+            automatically after the tip window.
+          </p>
         </div>
       </div>
     );
@@ -234,6 +360,14 @@ export default function TabPayPage() {
       </header>
 
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
+        {session && ['AWAITING_TIP', 'CAPTURING'].includes(session.status) && !tipPrompt && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-900">
+            In-app tipping isn&apos;t available (
+            <span className="font-medium">TIP_SECRET</span> missing or tip token failed). On production, payment usually still
+            finalizes after the tip-window cron (~15 minutes).
+          </div>
+        )}
+
         {hasUnserved && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-900">
             Some items may still be in the kitchen. You can leave — your server will catch up.
@@ -305,7 +439,7 @@ export default function TabPayPage() {
         ) : (
           <div className="space-y-2">
             <p className="text-xs text-center text-gray-500">
-              This lets the restaurant close out your meal and send your tip prompt.
+              This lets the restaurant close out your meal and finalize payment on your card on file.
             </p>
             <button
               type="button"

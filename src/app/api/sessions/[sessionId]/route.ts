@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
 import { validateUuid } from '@/lib/validate'
+import { verifyTipToken } from '@/lib/tip/tipToken'
 
 export async function GET(
   request: Request,
@@ -73,17 +74,44 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Resolve anon participant if applicable
+  // Resolve anon participant if applicable (+ minted tip JWT for in-app checkout)
   let anonParticipantId: string | null = null
+  let tipPrompt: {
+    tipToken: string
+    maxTipCents: number
+    subtotalCents: number
+  } | null = null
+
   if (isAnon && anonToken) {
-    const participant = await prisma.tabParticipant.findFirst({
+    const anonParticipant = await prisma.tabParticipant.findFirst({
       where: { sessionId, anonToken },
-      select: { id: true },
+      select: {
+        id: true,
+        tipPromptToken: true,
+        captureStatus: true,
+      },
     })
-    if (!participant) {
+    if (!anonParticipant) {
       return NextResponse.json({ error: 'Participant not found in session' }, { status: 403 })
     }
-    anonParticipantId = participant.id
+    anonParticipantId = anonParticipant.id
+
+    if (
+      anonParticipant.captureStatus === 'PENDING' &&
+      anonParticipant.tipPromptToken &&
+      process.env.TIP_SECRET
+    ) {
+      try {
+        const claims = verifyTipToken(anonParticipant.tipPromptToken)
+        tipPrompt = {
+          tipToken: anonParticipant.tipPromptToken,
+          maxTipCents: claims.maxTipCents,
+          subtotalCents: claims.subtotalCents,
+        }
+      } catch {
+        tipPrompt = null
+      }
+    }
   }
 
   // For anon callers: only return their own orders and service requests
@@ -160,6 +188,7 @@ export async function GET(
 
   return NextResponse.json({
     session,
+    tipPrompt,
     participants: participantsOut,
     orders: orders.map((o) => ({
       id: o.id,

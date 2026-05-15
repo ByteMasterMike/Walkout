@@ -411,7 +411,18 @@ export async function captureParticipantTab(input: CaptureParticipantTabInput): 
   }
 
   const sessionStatus = participant.session.status
-  if (sessionStatus !== 'AWAITING_TIP' && sessionStatus !== 'CAPTURING') {
+  // Full-table checkout sets AWAITING_TIP. Early departure (others still seated) leaves session OPEN
+  // but sets departedAt + awaitingTipSince — capture must still be allowed (PRD §11.6 flow).
+  const openSessionDepartedGuest =
+    sessionStatus === 'OPEN' &&
+    participant.departedAt != null &&
+    participant.awaitingTipSince != null
+
+  if (
+    sessionStatus !== 'AWAITING_TIP' &&
+    sessionStatus !== 'CAPTURING' &&
+    !openSessionDepartedGuest
+  ) {
     throw new Error(`captureParticipantTab: invalid session status ${sessionStatus}`)
   }
 
@@ -444,13 +455,17 @@ export async function captureParticipantTab(input: CaptureParticipantTabInput): 
   const stripe = getStripe()
 
   const persistRow = await prisma.$transaction(async (tx) => {
-    await tx.tabSession.updateMany({
-      where: {
-        id: participant.sessionId,
-        status: { in: ['AWAITING_TIP', 'CAPTURING'] },
-      },
-      data: { status: 'CAPTURING' },
-    })
+    // Last-guest checkout sets AWAITING_TIP → drive session toward CAPTURING.
+    // Early departure keeps session OPEN until others finish — do not mutate session status here.
+    if (participant.session.status !== 'OPEN') {
+      await tx.tabSession.updateMany({
+        where: {
+          id: participant.sessionId,
+          status: { in: ['AWAITING_TIP', 'CAPTURING'] },
+        },
+        data: { status: 'CAPTURING' },
+      })
+    }
 
     return tx.tabParticipant.update({
       where: { id: input.participantId, captureStatus: 'PROCESSING' },
@@ -476,7 +491,10 @@ export async function captureParticipantTab(input: CaptureParticipantTabInput): 
           amount_to_capture: cap.totalCents,
           application_fee_amount: feeSplit.holdFeeCents,
         },
-        { idempotencyKey: `capture-${input.participantId}-${captureAttempt}` },
+        {
+          idempotencyKey: `capture-${input.participantId}-${captureAttempt}`,
+          stripeAccount: input.stripeConnectAccountId,
+        },
       )
       return
     }
@@ -487,7 +505,10 @@ export async function captureParticipantTab(input: CaptureParticipantTabInput): 
         amount_to_capture: input.holdAmount,
         application_fee_amount: feeSplit.holdFeeCents,
       },
-      { idempotencyKey: `capture-${input.participantId}-${captureAttempt}` },
+      {
+        idempotencyKey: `capture-${input.participantId}-${captureAttempt}`,
+        stripeAccount: input.stripeConnectAccountId,
+      },
     )
 
     const overflowAttemptRow = await prisma.tabParticipant.update({
@@ -505,7 +526,6 @@ export async function captureParticipantTab(input: CaptureParticipantTabInput): 
         payment_method: input.stripePaymentMethodId,
         confirm: true,
         off_session: true,
-        on_behalf_of: input.stripeConnectAccountId,
         application_fee_amount: feeSplit.overflowFeeCents,
         metadata: {
           participantId: input.participantId,
@@ -513,7 +533,10 @@ export async function captureParticipantTab(input: CaptureParticipantTabInput): 
           type: 'overflow',
         },
       },
-      { idempotencyKey: `overflow-${input.participantId}-${overflowAttemptRow.overflowAttempt}` },
+      {
+        idempotencyKey: `overflow-${input.participantId}-${overflowAttemptRow.overflowAttempt}`,
+        stripeAccount: input.stripeConnectAccountId,
+      },
     )
 
     await prisma.tabParticipant.update({

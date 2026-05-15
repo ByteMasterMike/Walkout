@@ -13,7 +13,9 @@ export async function assignTipPromptTokensForSession(
 ): Promise<void> {
   try {
     if (!process.env.TIP_SECRET) {
-      console.warn('[assignTipPromptTokensForSession] TIP_SECRET missing — skipping tip token mint')
+      console.error(
+        '[assignTipPromptTokensForSession] TIP_SECRET missing — tip tokens NOT minted; SMS/in-app tip submission cannot run.',
+      )
       return
     }
 

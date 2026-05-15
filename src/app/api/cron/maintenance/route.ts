@@ -69,8 +69,11 @@ async function processDepartures(): Promise<void> {
     where: {
       captureStatus: 'PENDING',
       holdStatus: 'HELD',
+      departedAt: { not: null },
       awaitingTipSince: { not: null, lt: new Date(nowMs - TIP_WINDOW_MS) },
-      session: { status: { in: ['AWAITING_TIP', 'CAPTURING'] } },
+      session: {
+        status: { in: ['AWAITING_TIP', 'CAPTURING', 'OPEN'] },
+      },
     },
     include: {
       session: { include: { restaurant: true } },
@@ -197,15 +200,16 @@ async function cleanupSessions(): Promise<void> {
           capture_method: 'manual',
           confirm: true,
           off_session: true,
-          on_behalf_of: restaurant.stripeConnectAccountId,
-          application_fee_amount: 0,
           metadata: {
             participantId: p.id,
             sessionId: p.sessionId,
             type: 'reauth',
           },
         },
-        { idempotencyKey: `reauth-${p.id}-${p.reauthCount + 1}` },
+        {
+          idempotencyKey: `reauth-${p.id}-${p.reauthCount + 1}`,
+          stripeAccount: restaurant.stripeConnectAccountId,
+        },
       )
 
       await stripe.paymentIntents.cancel(p.stripePaymentIntentId!)

@@ -66,11 +66,12 @@ async function retryAuthHold(p: Awaited<ReturnType<typeof ensureParticipantForRe
         capture_method: 'manual',
         confirm: true,
         off_session: true,
-        on_behalf_of: restaurant.stripeConnectAccountId,
-        application_fee_amount: 0,
         metadata: { sessionId: p.sessionId, participantId: p.id, type: 'auth_hold' },
       },
-      { idempotencyKey: `hold-${p.id}-${newHoldAttempt}` },
+      {
+        idempotencyKey: `hold-${p.id}-${newHoldAttempt}`,
+        stripeAccount: restaurant.stripeConnectAccountId,
+      },
     )
 
     // Manual capture authorizations are `requires_capture`, not `succeeded`.
