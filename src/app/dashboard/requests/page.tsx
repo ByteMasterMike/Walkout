@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 
 import { PageShell, PageHead } from '@/components/pitch';
@@ -41,20 +41,6 @@ function elapsedLabel(iso: string): string {
   return `${Math.floor(mins / 60)}h ago`;
 }
 
-function playChime(ctx: AudioContext) {
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(880, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.3);
-  gain.gain.setValueAtTime(0.4, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-  osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + 0.6);
-}
-
 function sortRequestsForUi(reqs: ServiceRequest[]): ServiceRequest[] {
   const order = (s: ServiceReqStatus) => (s === 'OPEN' ? 0 : s === 'ACKNOWLEDGED' ? 1 : 99);
   return [...reqs].sort((a, b) => {
@@ -71,19 +57,6 @@ export default function RequestsPage() {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [chimeEnabled, setChimeEnabled] = useState(true);
   const [, setTick] = useState(0);
-  const audioCtx = useRef<AudioContext | null>(null);
-  const prevOpenCount = useRef(0);
-  const chimeEnabledRef = useRef(chimeEnabled);
-  useEffect(() => {
-    chimeEnabledRef.current = chimeEnabled;
-  }, [chimeEnabled]);
-
-  function getAudioCtx(): AudioContext {
-    if (!audioCtx.current) {
-      audioCtx.current = new AudioContext();
-    }
-    return audioCtx.current;
-  }
 
   const loadRequests = useCallback(async () => {
     if (!restaurantId) return;
@@ -94,27 +67,9 @@ export default function RequestsPage() {
     setRequests(sorted);
   }, [restaurantId]);
 
-  const checkAndChime = useCallback((reqs: ServiceRequest[]) => {
-    const openCount = reqs.filter((r) => r.status === 'OPEN').length;
-    if (chimeEnabledRef.current && openCount > prevOpenCount.current) {
-      try {
-        playChime(getAudioCtx());
-      } catch {
-        /* AudioContext may be blocked before user gesture */
-      }
-    }
-    prevOpenCount.current = openCount;
-  }, []);
-
   useEffect(() => {
-    void loadRequests().then(() => {
-      /* chime after initial load skipped */
-    });
+    void loadRequests();
   }, [loadRequests]);
-
-  useEffect(() => {
-    checkAndChime(requests);
-  }, [requests, checkAndChime]);
 
   const onStreamEvent = useCallback(
     (event: RestaurantStreamEvent) => {
