@@ -25,6 +25,22 @@ function ymdInTz(d: Date, tz: string): string {
   return `${y}-${m}-${day}`
 }
 
+/**
+ * Guest-facing total charged via Stripe for this participant row.
+ * Hold capture persists `capturedAmount` from the auth PI; when the bill exceeds the hold,
+ * the remainder is charged on a separate overflow PI (`overflowAmount` + `overflowStatus`).
+ */
+function effectiveCapturedCents(row: {
+  capturedAmount: number | null;
+  overflowAmount: number | null;
+  overflowStatus: string;
+}): number {
+  const holdPortion = row.capturedAmount ?? 0;
+  const overflowPortion =
+    row.overflowStatus === 'CAPTURED' ? (row.overflowAmount ?? 0) : 0;
+  return holdPortion + overflowPortion;
+}
+
 export async function getRestaurantDashboardAggregates(restaurantId: string): Promise<DashboardAggregates> {
   const restaurant = await prisma.restaurant.findUnique({
     where: { id: restaurantId },
@@ -68,21 +84,35 @@ export async function getRestaurantDashboardAggregates(restaurantId: string): Pr
       where: {
         session: { restaurantId },
         capturedAt: { gte: tonightStart, lt: tonightEnd },
+        captureStatus: 'CAPTURED',
         capturedAmount: { gt: 0 },
       },
-      select: { capturedAmount: true },
+      select: {
+        capturedAmount: true,
+        overflowAmount: true,
+        overflowStatus: true,
+      },
     }),
     prisma.tabParticipant.findMany({
       where: {
         session: { restaurantId },
         capturedAt: { gte: weekStart, lt: weekEnd },
+        captureStatus: 'CAPTURED',
         capturedAmount: { gt: 0 },
       },
-      select: { capturedAt: true, capturedAmount: true },
+      select: {
+        capturedAt: true,
+        capturedAmount: true,
+        overflowAmount: true,
+        overflowStatus: true,
+      },
     }),
   ])
 
-  const revenueTonightCents = capturedTonight.reduce((s, r) => s + (r.capturedAmount ?? 0), 0)
+  const revenueTonightCents = capturedTonight.reduce(
+    (s, r) => s + effectiveCapturedCents(r),
+    0,
+  )
   const countTickets = capturedTonight.length
   const avgTicketCents =
     countTickets > 0 ? Math.round(revenueTonightCents / countTickets) : null
@@ -95,7 +125,7 @@ export async function getRestaurantDashboardAggregates(restaurantId: string): Pr
     if (!row.capturedAt) continue
     const key = ymdInTz(row.capturedAt, tz)
     if (!bucket.has(key)) continue
-    bucket.set(key, (bucket.get(key) ?? 0) + (row.capturedAmount ?? 0))
+    bucket.set(key, (bucket.get(key) ?? 0) + effectiveCapturedCents(row))
   }
 
   const revenueByDay = dayMetas.map((m) => ({
