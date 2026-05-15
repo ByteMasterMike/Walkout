@@ -8,7 +8,7 @@
 import type { TipBehavior, TipSource } from '@prisma/client'
 import { Decimal } from 'decimal.js'
 import { prisma } from '@/lib/prisma'
-import { getStripe } from '@/lib/stripe'
+import { getStripe, STRIPE_PAYMENT_INTENT_CARD_ONLY } from '@/lib/stripe'
 
 // ================================================================
 // TYPES — mirror Prisma schema enums and model shapes
@@ -498,6 +498,7 @@ export async function captureParticipantTab(input: CaptureParticipantTabInput): 
 
     const overflowPi = await stripe.paymentIntents.create(
       {
+        ...STRIPE_PAYMENT_INTENT_CARD_ONLY,
         amount: feeSplit.overflowAmountCents,
         currency: 'usd',
         customer: input.stripeCustomerId,

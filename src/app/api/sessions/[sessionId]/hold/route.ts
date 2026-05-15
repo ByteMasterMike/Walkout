@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { stripe } from '@/lib/stripe';
+import { stripe, STRIPE_PAYMENT_INTENT_CARD_ONLY } from '@/lib/stripe';
 import { auth } from '@/lib/auth';
 import { validateUuid } from '@/lib/validate';
 
@@ -310,6 +310,7 @@ export async function POST(
   try {
     paymentIntent = await stripe.paymentIntents.create(
       {
+        ...STRIPE_PAYMENT_INTENT_CARD_ONLY,
         amount: restaurant.defaultHoldAmount,
         currency: 'usd',
         customer: participant.stripeCustomerId,

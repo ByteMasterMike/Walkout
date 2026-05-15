@@ -1,5 +1,16 @@
 import Stripe from 'stripe';
 
+/**
+ * WalkOut PaymentIntents use saved cards only. Without explicit types, Stripe can
+ * inherit Dashboard-enabled redirect PMs and reject `confirm` without `return_url`.
+ */
+export const STRIPE_PAYMENT_INTENT_CARD_ONLY: Pick<
+  Stripe.PaymentIntentCreateParams,
+  'payment_method_types'
+> = {
+  payment_method_types: ['card'],
+};
+
 let _stripe: Stripe | null = null;
 
 /**

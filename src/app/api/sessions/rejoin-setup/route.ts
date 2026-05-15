@@ -58,7 +58,10 @@ export async function GET(request: Request) {
       {
         customer: participant.stripeCustomerId,
         usage: 'off_session',
-        automatic_payment_methods: { enabled: true },
+        payment_method_types: ['card'],
+        payment_method_options: {
+          card: { request_three_d_secure: 'any' },
+        },
         metadata: {
           participantId: participant.id,
           sessionId: claims.sessionId,

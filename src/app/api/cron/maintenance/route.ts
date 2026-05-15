@@ -3,7 +3,7 @@ import { Decimal } from 'decimal.js'
 import { DepartureSource } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { captureParticipantTab, getTimeoutTipResolution } from '@/lib/payment/capture'
-import { getStripe } from '@/lib/stripe'
+import { getStripe, STRIPE_PAYMENT_INTENT_CARD_ONLY } from '@/lib/stripe'
 import { assignTipPromptTokensForSession } from '@/lib/tip/assignTipPromptTokens'
 import { notifyTipWindowOpened } from '@/lib/notify/tipWindow'
 
@@ -189,6 +189,7 @@ async function cleanupSessions(): Promise<void> {
     try {
       const newPi = await stripe.paymentIntents.create(
         {
+          ...STRIPE_PAYMENT_INTENT_CARD_ONLY,
           amount: p.holdAmount,
           currency: 'usd',
           customer: p.stripeCustomerId!,

@@ -3,7 +3,7 @@ import { Decimal } from 'decimal.js'
 import type { TipSource } from '@prisma/client'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { stripe, STRIPE_PAYMENT_INTENT_CARD_ONLY } from '@/lib/stripe'
 import { validateUuid } from '@/lib/validate'
 import { SettlementActionBodySchema } from '@/lib/schemas/settlements'
 import { captureParticipantTab, resolveDefaultTip, type OrderItemStatus } from '@/lib/payment/capture'
@@ -58,6 +58,7 @@ async function retryAuthHold(p: Awaited<ReturnType<typeof ensureParticipantForRe
   try {
     const paymentIntent = await stripe.paymentIntents.create(
       {
+        ...STRIPE_PAYMENT_INTENT_CARD_ONLY,
         amount: restaurant.defaultHoldAmount,
         currency: 'usd',
         customer: p.stripeCustomerId,
