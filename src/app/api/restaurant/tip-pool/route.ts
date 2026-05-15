@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { startOfDayInTz } from '@/lib/validate';
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user?.restaurantId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -36,7 +37,18 @@ export async function GET() {
   });
 
   const tz = restaurant.timezone;
-  const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+
+  const { searchParams } = new URL(request.url);
+  const daysParam = searchParams.get('days');
+  let rollingDays = 7;
+  if (daysParam !== null) {
+    const n = Number.parseInt(daysParam, 10);
+    if (Number.isFinite(n) && n >= 1 && n <= 90) rollingDays = n;
+  }
+
+  const todayStart = startOfDayInTz(tz);
+  const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  const rangeStart = new Date(todayStart.getTime() - (rollingDays - 1) * 24 * 60 * 60 * 1000);
 
   const tippedParticipants = await prisma.tabParticipant.findMany({
     where: {
@@ -56,8 +68,8 @@ export async function GET() {
 
   const filtered = tippedParticipants.filter((p) => {
     if (!p.capturedAt) return false;
-    const key = new Date(p.capturedAt).toLocaleDateString('en-CA', { timeZone: tz });
-    return key === todayKey;
+    const t = p.capturedAt.getTime();
+    return t >= rangeStart.getTime() && t < tomorrowStart.getTime();
   });
 
   type Agg = { staffName: string; grossCents: number; feeCents: number; sessions: Set<string> };
@@ -89,6 +101,7 @@ export async function GET() {
     tipDistributionMode: restaurant.tipDistributionMode,
     absorbTipProcessingFee: restaurant.absorbTipProcessingFee,
     timezone: restaurant.timezone,
+    rollingDays,
     pools: pools.map((p) => ({
       id: p.id,
       status: p.status,

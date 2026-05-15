@@ -3,11 +3,13 @@ import { NextResponse } from 'next/server';
 import { render } from '@react-email/render';
 import Stripe from 'stripe';
 import CaptureFailedEmail from '@/emails/CaptureFailedEmail';
-import { notifyCaptureSucceeded } from '@/lib/notify/captureReceipt';
 import { sendUrgentNotification } from '@/lib/notify/sendUrgent';
 import { prisma } from '@/lib/prisma';
 import { stripe } from '@/lib/stripe';
-import { allocateFee } from '@/lib/payment/capture';
+import {
+  finalizeHoldCaptureFromPaymentIntent,
+  finalizeOverflowCaptureFromPaymentIntent,
+} from '@/lib/payment/finalizeHoldCapture';
 import { applyConnectAccountUpdate } from '@/lib/stripe/refreshConnectStatus';
 
 function appUrl(): string {
@@ -52,7 +54,7 @@ export async function POST(request: Request) {
       const metaType = paymentIntent.metadata?.type;
 
       if (metaType === 'overflow') {
-        await handleOverflowSucceeded(paymentIntent);
+        await finalizeOverflowCaptureFromPaymentIntent(paymentIntent);
         break;
       }
 
@@ -66,7 +68,7 @@ export async function POST(request: Request) {
         captureCandidate?.captureStatus === 'PROCESSING' &&
         (paymentIntent.amount_received ?? 0) > 0
       ) {
-        await handleCaptureSucceeded(paymentIntent);
+        await finalizeHoldCaptureFromPaymentIntent(paymentIntent);
         break;
       }
 
@@ -118,208 +120,6 @@ async function handleAuthHoldSucceeded(pi: Stripe.PaymentIntent) {
     data: {
       holdStatus: 'HELD',
       holdAmount: pi.amount,
-    },
-  });
-}
-
-// ============================================================================
-// Handler: capture succeeded — the main post-capture webhook
-// ============================================================================
-
-async function handleCaptureSucceeded(pi: Stripe.PaymentIntent) {
-  // ── Step 1: Idempotency guard ─────────────────────────────────────────────
-  const participant = await prisma.tabParticipant.findFirst({
-    where: { stripePaymentIntentId: pi.id },
-    select: {
-      id: true,
-      captureStatus: true,
-      subtotalCents: true,
-      taxCents: true,
-      serviceFeeCents: true,
-      resolvedTipAmount: true,
-      session: {
-        select: {
-          assignedStaffId: true,
-          restaurantId: true,
-          restaurant: {
-            select: {
-              stripeConnectAccountId: true,
-              tipDistributionMode: true,
-              absorbTipProcessingFee: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!participant || participant.captureStatus === 'CAPTURED') return;
-
-  const { session } = participant;
-  const { restaurant } = session;
-
-  // ── Step 2: Retrieve the actual Stripe fee from the balance transaction ───
-  const chargeId =
-    typeof pi.latest_charge === 'string' ? pi.latest_charge : pi.latest_charge?.id;
-
-  if (!chargeId) return; // no charge attached — nothing to allocate
-
-  const charge = await stripe.charges.retrieve(
-    chargeId,
-    { expand: ['balance_transaction'] },
-    // Scope to the restaurant's connected account
-    { stripeAccount: restaurant.stripeConnectAccountId ?? undefined }
-  );
-
-  const balanceTx = charge.balance_transaction as Stripe.BalanceTransaction | null;
-  const stripeFeeCents = balanceTx?.fee ?? 0;
-
-  // ── Step 3: Pro-rata fee allocation (§17.8) ────────────────────────────────
-  // Uses the proven allocateFee() — all 20 TDD tests green for this function.
-  const tipAmountCents = participant.resolvedTipAmount ?? 0;
-
-  const allocation = allocateFee({
-    totalFeeCents: stripeFeeCents,
-    components: {
-      foodCents:       participant.subtotalCents ?? 0,
-      taxCents:        participant.taxCents ?? 0,
-      serviceFeeCents: participant.serviceFeeCents ?? 0,
-      tipCents:        tipAmountCents,
-    },
-  });
-
-  // ── Step 4: Tip attribution (DIRECT vs POOL) ──────────────────────────────
-  const tipAttributionData: {
-    tipAssignedToStaffId?: string | null;
-    tipPoolId?: string | null;
-  } = {};
-
-  if (restaurant.tipDistributionMode === 'DIRECT') {
-    tipAttributionData.tipAssignedToStaffId = session.assignedStaffId ?? null;
-  } else if (restaurant.tipDistributionMode === 'POOL' && tipAmountCents > 0) {
-    // Concurrency-safe pool upsert per PRD §17.4.
-    // Partial unique index `one_open_pool_per_restaurant` guarantees at-most-one OPEN pool.
-    let pool = await prisma.tipPool.findFirst({
-      where: { restaurantId: session.restaurantId, status: 'OPEN' },
-      select: { id: true },
-    });
-
-    if (!pool) {
-      try {
-        pool = await prisma.tipPool.create({
-          data: { restaurantId: session.restaurantId, status: 'OPEN', shiftDate: new Date() },
-          select: { id: true },
-        });
-      } catch (err: unknown) {
-        const prismaErr = err as { code?: string };
-        if (prismaErr.code !== 'P2002') throw err;
-        // Lost the creation race — re-fetch the winner
-        pool = await prisma.tipPool.findFirstOrThrow({
-          where: { restaurantId: session.restaurantId, status: 'OPEN' },
-          select: { id: true },
-        });
-      }
-    }
-
-    // Pool-entry and participant update are bundled into step 5's transaction below.
-    tipAttributionData.tipPoolId = pool.id;
-  }
-
-  // ── Step 5: Persist all capture fields + tip pool entry atomically ─────────
-  // Pool-entry write and captureStatus update are in ONE transaction so a
-  // Stripe webhook retry in the gap between steps cannot create a duplicate
-  // TipPoolEntry and inflate TipPool.totalAmountCents (security HIGH finding).
-  const participantUpdate = prisma.tabParticipant.update({
-    where: { id: participant.id },
-    data: {
-      captureStatus:                 'CAPTURED',
-      capturedAt:                    new Date(),
-      capturedAmount:                pi.amount_received ?? pi.amount,
-      holdStatus:                    'RELEASED',
-      feeAllocatedToFoodCents:       allocation.food,
-      feeAllocatedToTaxCents:        allocation.tax,
-      feeAllocatedToServiceFeeCents: allocation.serviceFee,
-      feeAllocatedToTipCents:        allocation.tip,
-      tipStatus:                     'RESOLVED',
-      ...tipAttributionData,
-    },
-  });
-
-  if (tipAttributionData.tipPoolId && tipAmountCents > 0) {
-    const poolId = tipAttributionData.tipPoolId;
-    await prisma.$transaction([
-      prisma.tipPoolEntry.create({
-        data: {
-          poolId,
-          participantId: participant.id,
-          staffId:       session.assignedStaffId ?? null,
-          amountCents:   tipAmountCents,
-        },
-      }),
-      prisma.tipPool.update({
-        where: { id: poolId },
-        data:  { totalAmountCents: { increment: tipAmountCents } },
-      }),
-      participantUpdate,
-    ]);
-  } else {
-    await participantUpdate;
-  }
-
-  await notifyCaptureSucceeded(participant.id, pi.amount_received ?? pi.amount ?? 0);
-
-  // ── Step 6: Receipt (handled by notifyCaptureSucceeded) ───────────────────
-}
-
-// ============================================================================
-// Handler: overflow PI succeeded
-// ============================================================================
-
-async function handleOverflowSucceeded(pi: Stripe.PaymentIntent) {
-  const participant = await prisma.tabParticipant.findFirst({
-    where: { overflowPaymentIntentId: pi.id },
-    select: {
-      id: true,
-      overflowStatus: true,
-      resolvedTipAmount: true,
-      overflowAmount: true,
-      session: {
-        select: {
-          restaurant: { select: { stripeConnectAccountId: true } },
-        },
-      },
-    },
-  });
-
-  if (!participant || participant.overflowStatus === 'CAPTURED') return;
-
-  const stripeAccount = participant.session.restaurant.stripeConnectAccountId ?? undefined;
-  const chargeId =
-    typeof pi.latest_charge === 'string' ? pi.latest_charge : pi.latest_charge?.id;
-
-  let tipFeeIncrement = 0;
-  if (chargeId && stripeAccount) {
-    const charge = await stripe.charges.retrieve(
-      chargeId,
-      { expand: ['balance_transaction'] },
-      { stripeAccount },
-    );
-    const balanceTx = charge.balance_transaction as Stripe.BalanceTransaction | null;
-    const overflowFeeCents = balanceTx?.fee ?? 0;
-    const overflowAmt = participant.overflowAmount ?? pi.amount ?? 0;
-    const tipCents = participant.resolvedTipAmount ?? 0;
-    if (overflowAmt > 0 && overflowFeeCents > 0 && tipCents > 0) {
-      tipFeeIncrement = Math.round((tipCents / overflowAmt) * overflowFeeCents);
-    }
-  }
-
-  await prisma.tabParticipant.update({
-    where: { id: participant.id },
-    data: {
-      overflowStatus: 'CAPTURED',
-      ...(tipFeeIncrement > 0
-        ? { feeAllocatedToTipCents: { increment: tipFeeIncrement } }
-        : {}),
     },
   });
 }

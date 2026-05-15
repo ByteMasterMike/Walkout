@@ -365,11 +365,56 @@ export interface CaptureParticipantTabInput {
 }
 
 /**
+ * Best-effort finalize CAPTURED in DB after `paymentIntents.capture` returns — complements Stripe webhooks.
+ */
+async function reconcileHoldCaptureFromStripe(
+  stripePaymentIntentId: string,
+  stripeConnectAccountId: string,
+): Promise<void> {
+  const stripe = getStripe()
+  try {
+    const pi = await stripe.paymentIntents.retrieve(
+      stripePaymentIntentId,
+      { expand: ['latest_charge.balance_transaction'] },
+      { stripeAccount: stripeConnectAccountId },
+    )
+    const { finalizeHoldCaptureFromPaymentIntent } = await import('@/lib/payment/finalizeHoldCapture')
+    await finalizeHoldCaptureFromPaymentIntent(pi)
+  } catch (err) {
+    console.warn(
+      '[captureParticipantTab] sync reconcile CAPTURED failed; Stripe webhook may still apply',
+      err,
+    )
+  }
+}
+
+async function reconcileOverflowCaptureFromStripe(
+  overflowPaymentIntentId: string,
+  stripeConnectAccountId: string,
+): Promise<void> {
+  const stripe = getStripe()
+  try {
+    const pi = await stripe.paymentIntents.retrieve(
+      overflowPaymentIntentId,
+      { expand: ['latest_charge.balance_transaction'] },
+      { stripeAccount: stripeConnectAccountId },
+    )
+    const { finalizeOverflowCaptureFromPaymentIntent } = await import('@/lib/payment/finalizeHoldCapture')
+    await finalizeOverflowCaptureFromPaymentIntent(pi)
+  } catch (err) {
+    console.warn(
+      '[captureParticipantTab] sync overflow finalize failed; Stripe webhook may still apply',
+      err,
+    )
+  }
+}
+
+/**
  * Execute the full capture flow for one participant:
  *   1. computeCapture math from persisted orders
  *   2. computeOverflowFees if needed
  *   3. Stripe PaymentIntent.capture (+ optional overflow PI)
- *   4. Persist resolved tip + component cents; webhook confirms CAPTURED
+ *   4. Sync reconcile CAPTURED (fee splits + tip pool) plus Stripe webhook as backup
  *
  * Preconditions:
  *   - Caller MUST have won CAS: TabParticipant.captureStatus === 'PROCESSING'
@@ -496,6 +541,10 @@ export async function captureParticipantTab(input: CaptureParticipantTabInput): 
           stripeAccount: input.stripeConnectAccountId,
         },
       )
+      await reconcileHoldCaptureFromStripe(
+        participant.stripePaymentIntentId,
+        input.stripeConnectAccountId,
+      )
       return
     }
 
@@ -509,6 +558,11 @@ export async function captureParticipantTab(input: CaptureParticipantTabInput): 
         idempotencyKey: `capture-${input.participantId}-${captureAttempt}`,
         stripeAccount: input.stripeConnectAccountId,
       },
+    )
+
+    await reconcileHoldCaptureFromStripe(
+      participant.stripePaymentIntentId,
+      input.stripeConnectAccountId,
     )
 
     const overflowAttemptRow = await prisma.tabParticipant.update({
@@ -546,6 +600,8 @@ export async function captureParticipantTab(input: CaptureParticipantTabInput): 
         overflowAmount: feeSplit.overflowAmountCents,
       },
     })
+
+    await reconcileOverflowCaptureFromStripe(overflowPi.id, input.stripeConnectAccountId)
   } catch (err) {
     console.error('[captureParticipantTab]', err)
     await prisma.tabParticipant.updateMany({

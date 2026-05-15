@@ -28,7 +28,10 @@ export async function GET(
       tableNumber: true,
       status: true,
       sessions: {
-        where: { status: { notIn: ['CLOSED', 'ABANDONED'] } },
+        where: {
+          status: { notIn: ['CLOSED', 'ABANDONED'] },
+          seatingClearedAt: null,
+        },
         take: 1,
         orderBy: { createdAt: 'desc' },
         include: {

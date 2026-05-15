@@ -53,7 +53,10 @@ export async function GET() {
     orderBy: { tableNumber: 'asc' },
     include: {
       sessions: {
-        where: { status: { notIn: ['CLOSED', 'ABANDONED'] } },
+        where: {
+          status: { notIn: ['CLOSED', 'ABANDONED'] },
+          seatingClearedAt: null,
+        },
         take: 1,
         orderBy: { createdAt: 'desc' },
         include: {

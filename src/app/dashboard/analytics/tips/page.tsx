@@ -27,6 +27,7 @@ type TipPayload = {
   tipDistributionMode: 'DIRECT' | 'POOL';
   absorbTipProcessingFee: boolean;
   timezone: string;
+  rollingDays: number;
   pools: PoolRow[];
   directRows: DirectRow[];
 };
@@ -40,10 +41,11 @@ export default function TipsAnalyticsPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
+  const [rollingDays, setRollingDays] = useState(7);
 
   const load = useCallback(async () => {
     setError('');
-    const res = await fetch('/api/restaurant/tip-pool');
+    const res = await fetch(`/api/restaurant/tip-pool?days=${rollingDays}`);
     if (!res.ok) {
       setError('Could not load tip data');
       setLoading(false);
@@ -52,7 +54,7 @@ export default function TipsAnalyticsPage() {
     const json = (await res.json()) as TipPayload;
     setData(json);
     setLoading(false);
-  }, []);
+  }, [rollingDays]);
 
   useEffect(() => {
     load();
@@ -162,6 +164,8 @@ export default function TipsAnalyticsPage() {
   const donePools = data.pools.filter((p) => p.status === 'DISTRIBUTED');
 
   const maxGross = Math.max(1, ...data.directRows.map((r) => r.grossCents));
+  const rangeSummary =
+    data.rollingDays === 1 ? 'Today' : `Last ${data.rollingDays} days`;
 
   return (
     <PageShell>
@@ -171,11 +175,32 @@ export default function TipsAnalyticsPage() {
             Tip <em>analytics</em>
           </>
         }
-        subtitle={<>Today&apos;s totals use your restaurant timezone ({data.timezone}).</>}
+        subtitle={
+          <>
+            Captured direct tips are summed over the last {data.rollingDays}{' '}
+            {data.rollingDays === 1 ? 'day' : 'days'} (restaurant midnight to midnight in{' '}
+            {data.timezone}), through today.
+          </>
+        }
         actions={
-          <div className="flex items-center gap-2">
-            <span className="mono text-muted-foreground">Mode</span>
-            <span className="codeline">{data.tipDistributionMode}</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <span className="mono text-muted-foreground">Range</span>
+              <select
+                className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                value={rollingDays}
+                onChange={(e) => setRollingDays(Number(e.target.value))}
+              >
+                <option value={1}>Today</option>
+                <option value={7}>Last 7 days</option>
+                <option value={14}>Last 14 days</option>
+                <option value={30}>Last 30 days</option>
+              </select>
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="mono text-muted-foreground">Mode</span>
+              <span className="codeline">{data.tipDistributionMode}</span>
+            </div>
           </div>
         }
       />
@@ -199,7 +224,7 @@ export default function TipsAnalyticsPage() {
               data.directRows.length > 0
                 ? formatMoney(Math.max(...data.directRows.map((r) => r.grossCents)))
                 : '—',
-            detail: 'Today',
+            detail: rangeSummary,
           },
           { label: 'Pools open', value: String(openPools.length), detail: 'Shift totals' },
           {
@@ -213,7 +238,7 @@ export default function TipsAnalyticsPage() {
       {data.tipDistributionMode === 'DIRECT' && (
         <div className="mt-40">
           <div className="mb-2 flex items-center justify-between">
-            <div className="mono">By server · today</div>
+            <div className="mono">By server · {rangeSummary.toLowerCase()}</div>
             <button
               type="button"
               onClick={downloadDirectCsv}
@@ -247,7 +272,9 @@ export default function TipsAnalyticsPage() {
             })}
           </div>
           {data.directRows.length === 0 && (
-            <p className="py-8 text-center text-sm text-muted-foreground">No captured tips yet today.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No captured tips in this range yet.
+            </p>
           )}
         </div>
       )}
