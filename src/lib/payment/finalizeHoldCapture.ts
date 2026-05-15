@@ -144,7 +144,8 @@ export async function finalizeHoldCaptureFromPaymentIntent(
 }
 
 /**
- * After overflow PI succeeds: mark overflow captured and allocate overflow Stripe fee share to tip bucket.
+ * After overflow PI succeeds: mark overflow captured and pro‑rate the overflow charge's Stripe fee
+ * across food/tax/service/tip (increments `feeAllocatedTo*` — same invariant as hold finalize, PRD 17.8).
  */
 export async function finalizeOverflowCaptureFromPaymentIntent(
   pi: Stripe.PaymentIntent,
@@ -156,6 +157,9 @@ export async function finalizeOverflowCaptureFromPaymentIntent(
       overflowStatus: true,
       resolvedTipAmount: true,
       overflowAmount: true,
+      subtotalCents: true,
+      taxCents: true,
+      serviceFeeCents: true,
       session: {
         select: {
           restaurant: { select: { stripeConnectAccountId: true } },
@@ -170,7 +174,7 @@ export async function finalizeOverflowCaptureFromPaymentIntent(
   const chargeId =
     typeof pi.latest_charge === 'string' ? pi.latest_charge : pi.latest_charge?.id;
 
-  let tipFeeIncrement = 0;
+  let overflowFeeAllocation = { food: 0, tax: 0, serviceFee: 0, tip: 0 };
   if (chargeId && stripeAccount) {
     const charge = await stripe.charges.retrieve(
       chargeId,
@@ -180,17 +184,47 @@ export async function finalizeOverflowCaptureFromPaymentIntent(
     const balanceTx = charge.balance_transaction as Stripe.BalanceTransaction | null;
     const overflowFeeCents = balanceTx?.fee ?? 0;
     const overflowAmt = participant.overflowAmount ?? pi.amount ?? 0;
-    const tipCents = participant.resolvedTipAmount ?? 0;
-    if (overflowAmt > 0 && overflowFeeCents > 0 && tipCents > 0) {
-      tipFeeIncrement = Math.round((tipCents / overflowAmt) * overflowFeeCents);
+    const food = participant.subtotalCents ?? 0;
+    const tax = participant.taxCents ?? 0;
+    const serviceFee = participant.serviceFeeCents ?? 0;
+    const tip = participant.resolvedTipAmount ?? 0;
+    const tabTotal = food + tax + serviceFee + tip;
+
+    if (overflowAmt > 0 && overflowFeeCents > 0 && tabTotal > 0) {
+      const tipOF = Math.floor((tip * overflowAmt) / tabTotal)
+      const taxOF = Math.floor((tax * overflowAmt) / tabTotal)
+      const svcOF = Math.floor((serviceFee * overflowAmt) / tabTotal)
+      const foodOF = overflowAmt - tipOF - taxOF - svcOF
+      overflowFeeAllocation = allocateFee({
+        totalFeeCents: overflowFeeCents,
+        components: {
+          foodCents: foodOF,
+          taxCents: taxOF,
+          serviceFeeCents: svcOF,
+          tipCents: tipOF,
+        },
+      });
     }
   }
+
+  const feeTotal =
+    overflowFeeAllocation.food +
+    overflowFeeAllocation.tax +
+    overflowFeeAllocation.serviceFee +
+    overflowFeeAllocation.tip;
 
   await prisma.tabParticipant.update({
     where: { id: participant.id },
     data: {
       overflowStatus: 'CAPTURED',
-      ...(tipFeeIncrement > 0 ? { feeAllocatedToTipCents: { increment: tipFeeIncrement } } : {}),
+      ...(feeTotal > 0
+        ? {
+            feeAllocatedToFoodCents: { increment: overflowFeeAllocation.food },
+            feeAllocatedToTaxCents: { increment: overflowFeeAllocation.tax },
+            feeAllocatedToServiceFeeCents: { increment: overflowFeeAllocation.serviceFee },
+            feeAllocatedToTipCents: { increment: overflowFeeAllocation.tip },
+          }
+        : {}),
     },
   });
 

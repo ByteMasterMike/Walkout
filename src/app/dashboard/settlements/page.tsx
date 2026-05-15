@@ -58,6 +58,7 @@ export default function SettlementsPage() {
   const [actioning, setActioning] = useState<string | null>(null);
   const [agg, setAgg] = useState<{
     revenueTonightCents: number;
+    stripeFeesTonightCents: number;
     openHolds: number;
   } | null>(null);
   // actioning format: `${rowId}-${action}`
@@ -85,6 +86,8 @@ export default function SettlementsPage() {
         if (d && typeof d.revenueTonightCents === 'number') {
           setAgg({
             revenueTonightCents: d.revenueTonightCents,
+            stripeFeesTonightCents:
+              typeof d.stripeFeesTonightCents === 'number' ? d.stripeFeesTonightCents : 0,
             openHolds: typeof d.openHolds === 'number' ? d.openHolds : 0,
           });
         }
@@ -167,8 +170,9 @@ export default function SettlementsPage() {
           },
           {
             label: 'Stripe fees',
-            value: '—',
-            detail: 'See Stripe Dashboard for processor fees',
+            value: agg != null ? fmtUsd(agg.stripeFeesTonightCents) : '—',
+            detail: 'Processor fees allocated on captures today (local restaurant day)',
+            detailClass: 'wn',
           },
         ]}
       />

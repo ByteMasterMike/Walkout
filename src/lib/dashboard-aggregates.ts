@@ -5,6 +5,7 @@ export type DashboardAggregates = {
   tablesActive: number
   tablesTotal: number
   revenueTonightCents: number
+  stripeFeesTonightCents: number
   avgTicketCents: number | null
   openHolds: number
   revenueByDay: { date: string; cents: number; label: string }[]
@@ -39,6 +40,21 @@ function effectiveCapturedCents(row: {
   const overflowPortion =
     row.overflowStatus === 'CAPTURED' ? (row.overflowAmount ?? 0) : 0;
   return holdPortion + overflowPortion;
+}
+
+/** Sum of feeAllocatedTo* for KPIs — matches Stripe fee when hold + overflow finalizers ran (PRD 17.8). */
+function totalAllocatedStripeFeeCents(row: {
+  feeAllocatedToFoodCents: number;
+  feeAllocatedToTaxCents: number;
+  feeAllocatedToServiceFeeCents: number;
+  feeAllocatedToTipCents: number;
+}): number {
+  return (
+    row.feeAllocatedToFoodCents +
+    row.feeAllocatedToTaxCents +
+    row.feeAllocatedToServiceFeeCents +
+    row.feeAllocatedToTipCents
+  );
 }
 
 export async function getRestaurantDashboardAggregates(restaurantId: string): Promise<DashboardAggregates> {
@@ -91,6 +107,10 @@ export async function getRestaurantDashboardAggregates(restaurantId: string): Pr
         capturedAmount: true,
         overflowAmount: true,
         overflowStatus: true,
+        feeAllocatedToFoodCents: true,
+        feeAllocatedToTaxCents: true,
+        feeAllocatedToServiceFeeCents: true,
+        feeAllocatedToTipCents: true,
       },
     }),
     prisma.tabParticipant.findMany({
@@ -113,6 +133,7 @@ export async function getRestaurantDashboardAggregates(restaurantId: string): Pr
     (s, r) => s + effectiveCapturedCents(r),
     0,
   )
+  const stripeFeesTonightCents = capturedTonight.reduce((s, r) => s + totalAllocatedStripeFeeCents(r), 0)
   const countTickets = capturedTonight.length
   const avgTicketCents =
     countTickets > 0 ? Math.round(revenueTonightCents / countTickets) : null
@@ -139,6 +160,7 @@ export async function getRestaurantDashboardAggregates(restaurantId: string): Pr
     tablesActive,
     tablesTotal,
     revenueTonightCents,
+    stripeFeesTonightCents,
     avgTicketCents,
     openHolds: openHoldsAgg,
     revenueByDay,
